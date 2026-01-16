@@ -105,6 +105,13 @@ class _HomeScreenState extends State<HomeScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           FloatingActionButton.small(
+            heroTag: 'chat',
+            onPressed: () => context.push('/chat'),
+            backgroundColor: Colors.purple,
+            child: const Icon(Icons.smart_toy, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton.small(
             heroTag: 'ocr',
             onPressed: () => context.push('/ocr'),
             child: const Icon(Icons.camera_alt),

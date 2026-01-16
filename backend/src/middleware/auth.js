@@ -21,4 +21,25 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
+// Optional auth - không bắt buộc đăng nhập
+const optionalAuth = async (req, res, next) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    req.user = error ? null : user;
+  } catch (error) {
+    req.user = null;
+  }
+
+  next();
+};
+
 module.exports = authMiddleware;
+module.exports.optionalAuth = optionalAuth;
+

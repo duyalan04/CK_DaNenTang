@@ -11,6 +11,7 @@ const budgetRoutes = require('./routes/budget.routes');
 const reportRoutes = require('./routes/report.routes');
 const predictionRoutes = require('./routes/prediction.routes');
 const ocrRoutes = require('./routes/ocr.routes');
+const chatRoutes = require('./routes/chat.routes');
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use('/api/budgets', budgetRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/predictions', predictionRoutes);
 app.use('/api/ocr', ocrRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

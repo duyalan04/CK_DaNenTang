@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { LayoutDashboard, Receipt, PiggyBank, BarChart3, LogOut } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import ChatBot from './ChatBot'
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -27,11 +28,10 @@ export default function Layout({ children }) {
             <Link
               key={path}
               to={path}
-              className={`flex items-center gap-3 px-4 py-2 rounded-lg transition-colors ${
-                location.pathname === path
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'text-gray-600 hover:bg-gray-50'
-              }`}
+              className={`flex items-center gap-3 px-4 py-2 rounded-lg transition-colors ${location.pathname === path
+                ? 'bg-blue-50 text-blue-600'
+                : 'text-gray-600 hover:bg-gray-50'
+                }`}
             >
               <Icon size={20} />
               {label}
@@ -47,6 +47,7 @@ export default function Layout({ children }) {
         </button>
       </aside>
       <main className="flex-1 p-8">{children}</main>
+      <ChatBot />
     </div>
   )
 }
