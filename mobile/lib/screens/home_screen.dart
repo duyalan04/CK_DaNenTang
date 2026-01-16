@@ -152,9 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           const Text('Giao dịch gần đây', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                           TextButton(
-                            onPressed: () {
-                              // TODO: Navigate to all transactions
-                            },
+                            onPressed: () => context.push('/transactions'),
                             child: const Text('Xem tất cả'),
                           ),
                         ],

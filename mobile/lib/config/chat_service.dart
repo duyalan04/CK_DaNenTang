@@ -4,8 +4,8 @@ import 'env.dart';
 class ChatService {
   static final Dio _dio = Dio(BaseOptions(
     baseUrl: Env.apiUrl,
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(seconds: 30),
+    connectTimeout: const Duration(seconds: 60),
+    receiveTimeout: const Duration(seconds: 120), // Tăng timeout cho AI response
     headers: {
       'Content-Type': 'application/json',
     },
@@ -37,14 +37,20 @@ class ChatService {
         throw Exception(response.data['error'] ?? 'Unknown error');
       }
     } on DioException catch (e) {
-      if (e.response?.statusCode == 401) {
-        return 'API key không hợp lệ. Vui lòng kiểm tra cấu hình.';
-      } else if (e.response?.statusCode == 429) {
-        return 'Đã vượt quá giới hạn. Vui lòng thử lại sau.';
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
+        return '⏱️ Kết nối quá lâu. Server có thể đang bận, vui lòng thử lại sau.';
       }
-      return 'Lỗi kết nối: ${e.message}';
+      if (e.response?.statusCode == 401) {
+        return '🔑 API key không hợp lệ. Vui lòng kiểm tra cấu hình.';
+      } else if (e.response?.statusCode == 429) {
+        return '⚠️ Đã vượt quá giới hạn request. Vui lòng thử lại sau ít phút.';
+      } else if (e.response?.statusCode == 500) {
+        return '❌ Lỗi server. Vui lòng thử lại sau.';
+      }
+      return '🔌 Lỗi kết nối: Không thể kết nối đến server. Kiểm tra kết nối mạng.';
     } catch (e) {
-      return 'Có lỗi xảy ra: $e';
+      return '❌ Có lỗi xảy ra: $e';
     }
   }
 
@@ -54,9 +60,12 @@ class ChatService {
       await _dio.post('/chat/clear', data: {
         'conversationId': _conversationId,
       });
-      _conversationId = null;
     } catch (e) {
       // Ignore errors
     }
+    _conversationId = null;
   }
+
+  /// Lấy conversation ID hiện tại
+  static String? get conversationId => _conversationId;
 }
