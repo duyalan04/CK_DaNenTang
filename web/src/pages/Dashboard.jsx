@@ -1,9 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
-import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend } from 'recharts'
 import { TrendingUp, TrendingDown, Wallet, Target } from 'lucide-react'
 import api from '../lib/api'
 
-const COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD']
+// Import AI Components
+import HealthScoreCard from '../components/HealthScoreCard'
+import AnomalyAlertCard from '../components/AnomalyAlertCard'
+import InsightsCard from '../components/InsightsCard'
+import SavingsCard from '../components/SavingsCard'
+
+const COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F']
 
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value)
@@ -32,11 +38,16 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <span className="text-sm text-gray-500">
+          🧠 AI-Powered Analytics
+        </span>
+      </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-6 rounded-xl shadow-sm">
+        <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-green-100 rounded-lg">
               <TrendingUp className="text-green-600" />
@@ -50,7 +61,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm">
+        <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-red-100 rounded-lg">
               <TrendingDown className="text-red-600" />
@@ -64,7 +75,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm">
+        <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-blue-100 rounded-lg">
               <Wallet className="text-blue-600" />
@@ -78,7 +89,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm">
+        <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-purple-100 rounded-lg">
               <Target className="text-purple-600" />
@@ -91,6 +102,18 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* AI Features Row - NEW! */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <HealthScoreCard />
+        <AnomalyAlertCard />
+      </div>
+
+      {/* AI Insights & Savings Row - NEW! */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <InsightsCard />
+        <SavingsCard />
       </div>
 
       {/* Charts */}
@@ -124,8 +147,9 @@ export default function Dashboard() {
               <XAxis dataKey="month" />
               <YAxis tickFormatter={(v) => `${(v / 1000000).toFixed(0)}M`} />
               <Tooltip formatter={(value) => formatCurrency(value)} />
-              <Line type="monotone" dataKey="income" stroke="#22c55e" strokeWidth={2} name="Thu nhập" />
-              <Line type="monotone" dataKey="expense" stroke="#ef4444" strokeWidth={2} name="Chi tiêu" />
+              <Legend />
+              <Line type="monotone" dataKey="income" stroke="#22c55e" strokeWidth={2} name="Thu nhập" dot={{ fill: '#22c55e' }} />
+              <Line type="monotone" dataKey="expense" stroke="#ef4444" strokeWidth={2} name="Chi tiêu" dot={{ fill: '#ef4444' }} />
             </LineChart>
           </ResponsiveContainer>
         </div>

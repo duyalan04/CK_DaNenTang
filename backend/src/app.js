@@ -12,6 +12,10 @@ const reportRoutes = require('./routes/report.routes');
 const predictionRoutes = require('./routes/prediction.routes');
 const ocrRoutes = require('./routes/ocr.routes');
 const chatRoutes = require('./routes/chat.routes');
+const analyticsRoutes = require('./routes/analytics.routes');
+const goalsRoutes = require('./routes/goals.routes');
+const recurringRoutes = require('./routes/recurring.routes');
+const smartRoutes = require('./routes/smart.routes');
 
 const app = express();
 
@@ -30,6 +34,10 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/predictions', predictionRoutes);
 app.use('/api/ocr', ocrRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/goals', goalsRoutes);
+app.use('/api/recurring', recurringRoutes);
+app.use('/api/smart', smartRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
