@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { LayoutDashboard, Receipt, PiggyBank, BarChart3, LogOut } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useToast } from './Toast'
 import ChatBot from './ChatBot'
 
 const navItems = [
@@ -12,9 +13,11 @@ const navItems = [
 
 export default function Layout({ children }) {
   const location = useLocation()
+  const toast = useToast()
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
+    toast.success('Đã đăng xuất thành công!')
   }
 
   return (

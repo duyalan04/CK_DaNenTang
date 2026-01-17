@@ -11,5 +11,7 @@ router.post('/', transactionController.create);
 router.put('/:id', transactionController.update);
 router.delete('/:id', transactionController.delete);
 router.post('/ocr', transactionController.createFromOCR);
+router.post('/parse-voice', transactionController.parseVoice);
+router.post('/parse-sms', transactionController.parseSms);
 
 module.exports = router;

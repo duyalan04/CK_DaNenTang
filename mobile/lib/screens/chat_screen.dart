@@ -103,19 +103,33 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
       final response = await ChatService.sendMessage(text, authToken: authToken);
 
-      final isError = response.contains('❌') || 
-                      response.contains('🔌') || 
-                      response.contains('⏱️') ||
-                      response.contains('🔑');
+      final isError = response.message.contains('❌') || 
+                      response.message.contains('🔌') || 
+                      response.message.contains('⏱️') ||
+                      response.message.contains('🔑');
 
       setState(() {
         _messages.add(ChatMessage(
-          content: response,
+          content: response.message,
           isUser: false,
           isError: isError,
         ));
         _isLoading = false;
       });
+
+      // Hiển thị thông báo nếu tạo giao dịch thành công
+      if (response.hasTransaction && mounted) {
+        final tx = response.transactionCreated!;
+        final type = tx['type'] == 'income' ? 'Thu nhập' : 'Chi tiêu';
+        final amount = tx['amount'] ?? 0;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Đã ghi $type: ${_formatCurrency(amount)}'),
+            backgroundColor: tx['type'] == 'income' ? Colors.green : Colors.orange,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
       setState(() {
         _messages.add(ChatMessage(
@@ -127,6 +141,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       });
     }
     _scrollToBottom();
+  }
+
+  String _formatCurrency(num value) {
+    return '${(value / 1000).toStringAsFixed(0)}k đ';
   }
 
   void _retryLastMessage() {

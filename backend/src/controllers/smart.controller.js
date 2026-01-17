@@ -384,16 +384,16 @@ async function getAIDeepAnalysis(analysis, transactions) {
 function generatePatternInsights(peakDay, peakWeek, topCategories, dayNames) {
     const insights = [];
 
-    insights.push(`📅 Bạn chi tiêu nhiều nhất vào ${dayNames[peakDay]}`);
+    insights.push(`Bạn chi tiêu nhiều nhất vào ${dayNames[peakDay]}`);
 
     if (peakWeek === 0) {
-        insights.push('💡 Chi tiêu tập trung đầu tháng - có thể do nhận lương');
+        insights.push('Chi tiêu tập trung đầu tháng - có thể do nhận lương');
     } else if (peakWeek >= 3) {
-        insights.push('⚠️ Chi tiêu nhiều cuối tháng - cần kiểm soát tốt hơn');
+        insights.push('Chi tiêu nhiều cuối tháng - cần kiểm soát tốt hơn');
     }
 
     if (topCategories[0]) {
-        insights.push(`🏆 ${topCategories[0].name} chiếm phần lớn chi tiêu của bạn`);
+        insights.push(`${topCategories[0].name} chiếm phần lớn chi tiêu của bạn`);
     }
 
     return insights;

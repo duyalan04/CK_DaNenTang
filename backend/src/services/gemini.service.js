@@ -40,7 +40,7 @@ Tìm các từ khóa theo thứ tự ưu tiên:
 4. "Total" / "Grand Total"
 5. "Tiền khách trả" / "Tiền mặt" (số tiền thực trả)
 
-⚠️ QUAN TRỌNG:
+QUAN TRỌNG:
 - Lấy số tiền CUỐI CÙNG, SAU khi đã trừ giảm giá/khuyến mãi
 - Nếu có "Tiền trả lại khách" thì tổng = "Tiền khách trả" - "Tiền trả lại"
 - Số tiền VND thường có dấu chấm hoặc dấu phẩy ngăn cách hàng nghìn (14,000 hoặc 14.000 = 14000)
@@ -267,13 +267,68 @@ async function analyzeReceipt(imageBase64, mimeType = 'image/jpeg') {
 
     console.log('Gemini Raw Response:', response);
     
-    // 3. Parse JSON từ response
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return { success: false, error: 'Không thể parse kết quả từ AI' };
+    // 3. Parse JSON từ response - với xử lý lỗi tốt hơn
+    let parsed;
+    try {
+      // Tìm JSON object trong response
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        return { success: false, error: 'Không thể tìm thấy JSON trong response' };
+      }
+      
+      let jsonStr = jsonMatch[0];
+      
+      // Clean up common JSON issues từ AI
+      // 1. Remove trailing commas before } or ]
+      jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
+      
+      // 2. Fix unescaped quotes trong strings
+      // Tìm và escape quotes trong giá trị string
+      jsonStr = jsonStr.replace(/"([^"]*?)"/g, (match, content) => {
+        // Escape các quote chưa được escape trong content
+        const escaped = content.replace(/(?<!\\)"/g, '\\"');
+        return `"${escaped}"`;
+      });
+      
+      // 3. Remove control characters
+      jsonStr = jsonStr.replace(/[\x00-\x1F\x7F]/g, ' ');
+      
+      // 4. Fix số có dấu phẩy trong JSON (14,000 -> 14000)
+      // Chỉ fix trong context của số, không phải trong string
+      jsonStr = jsonStr.replace(/:\s*(\d{1,3}(?:,\d{3})+)(?=[,}\]\s])/g, (match, num) => {
+        return ': ' + num.replace(/,/g, '');
+      });
+      
+      parsed = JSON.parse(jsonStr);
+      
+    } catch (parseError) {
+      console.error('JSON Parse Error:', parseError.message);
+      console.error('Attempting fallback parsing...');
+      
+      // Fallback: Trích xuất thông tin cơ bản bằng regex
+      const totalMatch = response.match(/"totalAmount"\s*:\s*"?(\d[\d,.\s]*)"?/i);
+      const storeMatch = response.match(/"storeName"\s*:\s*"([^"]+)"/i);
+      const dateMatch = response.match(/"date"\s*:\s*"([^"]+)"/i);
+      const categoryMatch = response.match(/"suggestedCategory"\s*:\s*"([^"]+)"/i);
+      
+      if (totalMatch) {
+        parsed = {
+          success: true,
+          storeName: storeMatch ? storeMatch[1] : 'Không xác định',
+          date: dateMatch ? dateMatch[1] : new Date().toISOString().split('T')[0],
+          totalAmount: cleanAmount(totalMatch[1]),
+          suggestedCategory: categoryMatch ? categoryMatch[1] : 'Mua sắm',
+          items: [],
+          confidence: 60,
+          note: 'Parsed with fallback method'
+        };
+      } else {
+        return { 
+          success: false, 
+          error: 'Không thể đọc thông tin từ hóa đơn. Vui lòng chụp rõ hơn.' 
+        };
+      }
     }
-
-    const parsed = JSON.parse(jsonMatch[0]);
     
     // 4. Validate và clean data
     if (parsed.totalAmount) {

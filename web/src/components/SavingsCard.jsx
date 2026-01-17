@@ -68,7 +68,7 @@ const RecommendationItem = ({ recommendation }) => {
                     </div>
 
                     <p className="mt-2 text-sm text-gray-500 italic">
-                        💡 {tip}
+                        {tip}
                     </p>
 
                     <div className="mt-2 p-2 bg-green-50 rounded-md">
@@ -125,7 +125,7 @@ export default function SavingsCard() {
                     <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
                         <Sparkles className="w-8 h-8 text-green-500" />
                     </div>
-                    <p className="text-gray-600">Chi tiêu của bạn đang hợp lý! 🎉</p>
+                    <p className="text-gray-600">Chi tiêu của bạn đang hợp lý!</p>
                     <p className="text-sm text-gray-400 mt-1">Chưa cần điều chỉnh</p>
                 </div>
             </div>

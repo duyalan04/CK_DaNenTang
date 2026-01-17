@@ -85,6 +85,7 @@ export default function HealthScoreCard() {
     const { data, isLoading, error, refetch } = useQuery({
         queryKey: ['healthScore'],
         queryFn: () => api.get('/analytics/health-score').then(res => res.data),
+        staleTime: 5 * 60 * 1000, // Cache 5 phút
         refetchInterval: 60000 // Refresh mỗi phút
     })
 

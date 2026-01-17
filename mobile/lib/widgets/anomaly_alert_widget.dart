@@ -255,7 +255,7 @@ class _AnomalyAlertWidgetState extends State<AnomalyAlertWidget> {
 }
 
 class _AnomalyItem extends StatelessWidget {
-  final Map<String, dynamic> anomaly;
+  final dynamic anomaly;
   final String Function(num) formatCurrency;
   final String Function(String) formatDate;
 
@@ -265,12 +265,20 @@ class _AnomalyItem extends StatelessWidget {
     required this.formatDate,
   });
 
+  double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final severity = anomaly['severity'] ?? 'low';
-    final transaction = anomaly['transaction'] ?? {};
-    final zScore = anomaly['z_score'] ?? '0';
-    final description = anomaly['description'] ?? '';
+    final a = anomaly as Map<String, dynamic>? ?? {};
+    final severity = a['severity']?.toString() ?? 'low';
+    final transaction = a['transaction'] as Map<String, dynamic>? ?? {};
+    final zScore = a['z_score']?.toString() ?? '0';
+    final description = a['description']?.toString() ?? '';
 
     Color bgColor;
     Color borderColor;
@@ -301,10 +309,11 @@ class _AnomalyItem extends StatelessWidget {
         severityText = 'Nhẹ';
     }
 
-    final amount = (transaction['amount'] ?? 0).toDouble();
-    final type = transaction['type'] ?? 'expense';
-    final category = transaction['categories']?['name'] ?? 'Không xác định';
-    final date = transaction['transaction_date'] ?? '';
+    final amount = _parseDouble(transaction['amount']);
+    final type = transaction['type']?.toString() ?? 'expense';
+    final categories = transaction['categories'] as Map<String, dynamic>? ?? {};
+    final category = categories['name']?.toString() ?? 'Không xác định';
+    final date = transaction['transaction_date']?.toString() ?? '';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),

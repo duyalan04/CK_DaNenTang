@@ -8,6 +8,7 @@ import HealthScoreCard from '../components/HealthScoreCard'
 import AnomalyAlertCard from '../components/AnomalyAlertCard'
 import InsightsCard from '../components/InsightsCard'
 import SavingsCard from '../components/SavingsCard'
+import SmartBudgetCard from '../components/SmartBudgetCard'
 
 const COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F']
 
@@ -16,24 +17,29 @@ const formatCurrency = (value) => {
 }
 
 export default function Dashboard() {
+  // Cache 5 phút cho data cơ bản
   const { data: summary } = useQuery({
     queryKey: ['summary'],
-    queryFn: () => api.get('/reports/summary').then(res => res.data)
+    queryFn: () => api.get('/reports/summary').then(res => res.data),
+    staleTime: 5 * 60 * 1000, // 5 phút
   })
 
   const { data: byCategory } = useQuery({
     queryKey: ['byCategory'],
-    queryFn: () => api.get('/reports/by-category').then(res => res.data)
+    queryFn: () => api.get('/reports/by-category').then(res => res.data),
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: trend } = useQuery({
     queryKey: ['trend'],
-    queryFn: () => api.get('/reports/monthly-trend').then(res => res.data)
+    queryFn: () => api.get('/reports/monthly-trend').then(res => res.data),
+    staleTime: 10 * 60 * 1000, // 10 phút - ít thay đổi
   })
 
   const { data: prediction } = useQuery({
     queryKey: ['prediction'],
-    queryFn: () => api.get('/predictions/next-month').then(res => res.data)
+    queryFn: () => api.get('/predictions/next-month').then(res => res.data),
+    staleTime: 30 * 60 * 1000, // 30 phút - AI prediction ít thay đổi
   })
 
   return (
@@ -110,11 +116,14 @@ export default function Dashboard() {
         <AnomalyAlertCard />
       </div>
 
-      {/* AI Insights & Savings Row - NEW! */}
+      {/* AI Insights & Savings Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <InsightsCard />
         <SavingsCard />
       </div>
+
+      {/* Smart Budget */}
+      <SmartBudgetCard />
 
       {/* Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

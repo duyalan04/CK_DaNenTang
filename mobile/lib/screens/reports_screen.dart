@@ -5,7 +5,6 @@ import '../config/api.dart';
 import '../widgets/anomaly_alert_widget.dart';
 import '../widgets/ai_insights_widget.dart';
 import '../widgets/savings_suggestions_widget.dart';
-import '../widgets/spending_patterns_widget.dart';
 import '../widgets/smart_budget_widget.dart';
 
 class ReportsScreen extends StatefulWidget {
@@ -64,6 +63,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0).format(value);
   }
 
+  double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
   String _formatShortCurrency(num value) {
     if (value >= 1000000) {
       return '${(value / 1000000).toStringAsFixed(1)}M';
@@ -102,11 +108,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   const AnomalyAlertWidget(),
                   const SizedBox(height: 16),
 
-                  // Spending Patterns
-                  const SpendingPatternsWidget(),
-                  const SizedBox(height: 16),
-
-                  // Smart Budget Suggestions (50/30/20)
+                  // Smart Budget Widget
                   const SmartBudgetWidget(),
                   const SizedBox(height: 16),
 
@@ -261,7 +263,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
       );
     }
 
-    final total = _byCategory.fold<double>(0, (sum, c) => sum + (c['total'] ?? 0).toDouble());
+    final total = _byCategory.fold<double>(0, (sum, c) {
+      final cat = c as Map<String, dynamic>? ?? {};
+      return sum + _parseDouble(cat['total']);
+    });
 
     return Card(
       child: Padding(
@@ -280,8 +285,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   centerSpaceRadius: 40,
                   sections: _byCategory.asMap().entries.map((entry) {
                     final index = entry.key;
-                    final cat = entry.value;
-                    final value = (cat['total'] ?? 0).toDouble();
+                    final cat = entry.value as Map<String, dynamic>? ?? {};
+                    final value = _parseDouble(cat['total']);
                     final percent = total > 0 ? (value / total * 100) : 0;
                     return PieChartSectionData(
                       value: value,
@@ -341,8 +346,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
 
     final maxY = _monthlyTrend.fold<double>(0, (max, m) {
-      final income = (m['income'] ?? 0).toDouble();
-      final expense = (m['expense'] ?? 0).toDouble();
+      final item = m as Map<String, dynamic>? ?? {};
+      final income = _parseDouble(item['income']);
+      final expense = _parseDouble(item['expense']);
       return [max, income, expense].reduce((a, b) => a > b ? a : b);
     });
 
@@ -414,7 +420,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     // Income line
                     LineChartBarData(
                       spots: _monthlyTrend.asMap().entries.map((e) {
-                        return FlSpot(e.key.toDouble(), (e.value['income'] ?? 0).toDouble());
+                        final item = e.value as Map<String, dynamic>? ?? {};
+                        return FlSpot(e.key.toDouble(), _parseDouble(item['income']));
                       }).toList(),
                       isCurved: true,
                       color: Colors.green,
@@ -424,7 +431,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     // Expense line
                     LineChartBarData(
                       spots: _monthlyTrend.asMap().entries.map((e) {
-                        return FlSpot(e.key.toDouble(), (e.value['expense'] ?? 0).toDouble());
+                        final item = e.value as Map<String, dynamic>? ?? {};
+                        return FlSpot(e.key.toDouble(), _parseDouble(item['expense']));
                       }).toList(),
                       isCurved: true,
                       color: Colors.red,

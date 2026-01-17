@@ -10,6 +10,9 @@ import '../screens/reports_screen.dart';
 import '../screens/goals_screen.dart';
 import '../screens/smart_analysis_screen.dart';
 import '../screens/transactions_screen.dart';
+import '../screens/voice_input_screen.dart';
+import '../screens/recurring_screen.dart';
+import '../screens/sms_screen.dart';
 
 final router = GoRouter(
   initialLocation: '/',
@@ -33,6 +36,9 @@ final router = GoRouter(
     GoRoute(path: '/goals', builder: (context, state) => const GoalsScreen()),
     GoRoute(path: '/smart', builder: (context, state) => const SmartAnalysisScreen()),
     GoRoute(path: '/transactions', builder: (context, state) => const TransactionsScreen()),
+    GoRoute(path: '/voice', builder: (context, state) => const VoiceInputScreen()),
+    GoRoute(path: '/recurring', builder: (context, state) => const RecurringScreen()),
+    GoRoute(path: '/sms', builder: (context, state) => const SmsScreen()),
   ],
 );
 

@@ -48,6 +48,13 @@ class _SavingsSuggestionsWidgetState extends State<SavingsSuggestionsWidget> {
     }
   }
 
+  double _parseNum(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
   String _formatCurrency(num value) {
     return NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0).format(value);
   }
@@ -126,11 +133,13 @@ class _SavingsSuggestionsWidgetState extends State<SavingsSuggestionsWidget> {
                         children: [
                           const Icon(Icons.trending_up, color: Colors.green),
                           const SizedBox(width: 8),
-                          Text(
-                            'Tiềm năng tiết kiệm: ${_formatCurrency(_summary!['totalPotentialYearlySavings'] ?? 0)}/năm',
-                            style: TextStyle(
-                              color: Colors.green.shade700,
-                              fontWeight: FontWeight.bold,
+                          Flexible(
+                            child: Text(
+                              'Tiềm năng tiết kiệm: ${_formatCurrency(_parseNum(_summary!['totalPotentialYearlySavings']))}/năm',
+                              style: TextStyle(
+                                color: Colors.green.shade700,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ],
@@ -201,7 +210,7 @@ class _SavingsSuggestionsWidgetState extends State<SavingsSuggestionsWidget> {
 }
 
 class _RecommendationItem extends StatelessWidget {
-  final Map<String, dynamic> recommendation;
+  final dynamic recommendation;
   final String Function(num) formatCurrency;
 
   const _RecommendationItem({
@@ -209,16 +218,32 @@ class _RecommendationItem extends StatelessWidget {
     required this.formatCurrency,
   });
 
+  double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
+  int _parseInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final category = recommendation['category'];
-    final categoryName = category?['name'] ?? recommendation['categoryName'] ?? 'Không xác định';
-    final currentSpending = (recommendation['currentMonthlySpending'] ?? 0).toDouble();
-    final suggestedReduction = (recommendation['suggestedReduction'] ?? 0).toDouble();
-    final potentialSavings = (recommendation['potentialYearlySavings'] ?? 0).toDouble();
-    final percentOfTotal = (recommendation['percentOfTotal'] ?? 0).toDouble();
-    final priority = recommendation['priority'] ?? 3;
-    final tip = recommendation['tip'] ?? '';
+    final rec = recommendation as Map<String, dynamic>? ?? {};
+    final category = rec['category'] as Map<String, dynamic>?;
+    final categoryName = category?['name']?.toString() ?? rec['categoryName']?.toString() ?? 'Không xác định';
+    final currentSpending = _parseDouble(rec['currentMonthlySpending']);
+    final suggestedReduction = _parseDouble(rec['suggestedReduction']);
+    final potentialSavings = _parseDouble(rec['potentialYearlySavings']);
+    final percentOfTotal = _parseDouble(rec['percentOfTotal']);
+    final priority = _parseInt(rec['priority']);
+    final tip = rec['tip']?.toString() ?? '';
 
     Color priorityColor;
     String priorityText;
@@ -276,7 +301,7 @@ class _RecommendationItem extends StatelessWidget {
                   children: [
                     Text('Hiện tại: ${formatCurrency(currentSpending)}/tháng',
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                    Text('Chiếm $percentOfTotal% tổng chi tiêu',
+                    Text('Chiếm ${percentOfTotal.toStringAsFixed(1)}% tổng chi tiêu',
                         style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
                   ],
                 ),

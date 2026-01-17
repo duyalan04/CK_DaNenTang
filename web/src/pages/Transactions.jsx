@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
 import api from '../lib/api'
+import { useToast } from '../components/Toast'
 
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value)
@@ -9,6 +10,7 @@ const formatCurrency = (value) => {
 
 export default function Transactions() {
   const queryClient = useQueryClient()
+  const toast = useToast()
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({
     categoryId: '', amount: '', type: 'expense', description: '', transactionDate: new Date().toISOString().split('T')[0]
@@ -30,12 +32,22 @@ export default function Transactions() {
       queryClient.invalidateQueries(['transactions'])
       setShowModal(false)
       setForm({ categoryId: '', amount: '', type: 'expense', description: '', transactionDate: new Date().toISOString().split('T')[0] })
+      toast.success('Thêm giao dịch thành công!')
+    },
+    onError: () => {
+      toast.error('Không thể thêm giao dịch')
     }
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.delete(`/transactions/${id}`),
-    onSuccess: () => queryClient.invalidateQueries(['transactions'])
+    onSuccess: () => {
+      queryClient.invalidateQueries(['transactions'])
+      toast.success('Đã xóa giao dịch')
+    },
+    onError: () => {
+      toast.error('Không thể xóa giao dịch')
+    }
   })
 
   const handleSubmit = (e) => {
@@ -113,8 +125,11 @@ export default function Transactions() {
                 <option value="">Chọn danh mục</option>
                 {filteredCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
-              <input type="number" placeholder="Số tiền" value={form.amount}
-                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              <input type="text" inputMode="numeric" placeholder="Số tiền" value={form.amount}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^0-9]/g, '')
+                  setForm({ ...form, amount: value })
+                }}
                 className="w-full px-4 py-2 border rounded-lg" required />
               <input type="text" placeholder="Mô tả" value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}

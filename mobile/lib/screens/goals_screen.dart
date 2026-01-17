@@ -319,7 +319,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
 }
 
 class _GoalCard extends StatelessWidget {
-  final Map<String, dynamic> goal;
+  final dynamic goal;
   final String Function(num) formatCurrency;
   final VoidCallback onContribute;
   final VoidCallback onDelete;
@@ -331,13 +331,21 @@ class _GoalCard extends StatelessWidget {
     required this.onDelete,
   });
 
+  double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final progress = (goal['progress'] ?? 0).toDouble();
-    final current = (goal['current_amount'] ?? 0).toDouble();
-    final target = (goal['target_amount'] ?? 0).toDouble();
-    final daysRemaining = goal['daysRemaining'];
-    final isOnTrack = goal['isOnTrack'] ?? true;
+    final g = goal as Map<String, dynamic>? ?? {};
+    final progress = _parseDouble(g['progress']);
+    final current = _parseDouble(g['current_amount']);
+    final target = _parseDouble(g['target_amount']);
+    final daysRemaining = g['daysRemaining'];
+    final isOnTrack = g['isOnTrack'] ?? true;
 
     Color progressColor;
     if (progress >= 100) {
@@ -370,7 +378,7 @@ class _GoalCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(goal['name'] ?? '', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      Text(g['name']?.toString() ?? '', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       if (daysRemaining != null)
                         Text(
                           daysRemaining > 0 ? 'Còn $daysRemaining ngày' : 'Đã hết hạn',
@@ -415,9 +423,9 @@ class _GoalCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Mục tiêu: ${formatCurrency(target)}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-                if (goal['monthlyNeeded'] != null && goal['monthlyNeeded'] > 0)
+                if (g['monthlyNeeded'] != null && _parseDouble(g['monthlyNeeded']) > 0)
                   Text(
-                    'Cần ${formatCurrency(goal['monthlyNeeded'])}/tháng',
+                    'Cần ${formatCurrency(_parseDouble(g['monthlyNeeded']))}/tháng',
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                   ),
               ],

@@ -54,7 +54,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }
 
   void _applyFilters() {
-    _filteredTransactions = _transactions.where((t) {
+    _filteredTransactions = _transactions.where((item) {
+      final t = item as Map<String, dynamic>? ?? {};
       // Type filter
       if (_typeFilter != 'all' && t['type'] != _typeFilter) return false;
 
@@ -63,7 +64,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
       // Date range filter
       if (_dateRange != null) {
-        final date = DateTime.tryParse(t['transaction_date'] ?? '');
+        final date = DateTime.tryParse(t['transaction_date']?.toString() ?? '');
         if (date == null) return false;
         if (date.isBefore(_dateRange!.start) || date.isAfter(_dateRange!.end)) return false;
       }
@@ -102,12 +103,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }
 
   num get _totalIncome => _filteredTransactions
-      .where((t) => t['type'] == 'income')
-      .fold<num>(0, (sum, t) => sum + (t['amount'] ?? 0));
+      .where((item) => (item as Map<String, dynamic>?)?['type'] == 'income')
+      .fold<num>(0, (sum, item) => sum + ((item as Map<String, dynamic>?)?['amount'] as num? ?? 0));
 
   num get _totalExpense => _filteredTransactions
-      .where((t) => t['type'] == 'expense')
-      .fold<num>(0, (sum, t) => sum + (t['amount'] ?? 0));
+      .where((item) => (item as Map<String, dynamic>?)?['type'] == 'expense')
+      .fold<num>(0, (sum, item) => sum + ((item as Map<String, dynamic>?)?['amount'] as num? ?? 0));
 
   @override
   Widget build(BuildContext context) {
@@ -268,7 +269,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     // Group by date
     final grouped = <String, List<dynamic>>{};
     for (final t in _filteredTransactions) {
-      final date = t['transaction_date']?.toString().split('T')[0] ?? 'Không rõ';
+      final tMap = t as Map<String, dynamic>? ?? {};
+      final date = tMap['transaction_date']?.toString().split('T')[0] ?? 'Không rõ';
       grouped.putIfAbsent(date, () => []).add(t);
     }
 
@@ -306,7 +308,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 }
 
 class _TransactionCard extends StatelessWidget {
-  final Map<String, dynamic> transaction;
+  final dynamic transaction;
   final String Function(num) formatCurrency;
   final VoidCallback onRefresh;
 
@@ -318,12 +320,13 @@ class _TransactionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isExpense = transaction['type'] == 'expense';
-    final category = transaction['categories'];
-    final colorHex = category?['color'] ?? '#808080';
+    final t = transaction as Map<String, dynamic>? ?? {};
+    final isExpense = t['type'] == 'expense';
+    final category = t['categories'] as Map<String, dynamic>?;
+    final colorHex = category?['color']?.toString() ?? '#808080';
     final color = Color(int.parse(colorHex.replaceFirst('#', '0xFF')));
-    final amount = transaction['amount'] ?? 0;
-    final description = transaction['description'] ?? '';
+    final amount = (t['amount'] ?? 0) as num;
+    final description = t['description']?.toString() ?? '';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -331,12 +334,12 @@ class _TransactionCard extends StatelessWidget {
         leading: CircleAvatar(
           backgroundColor: color.withOpacity(0.2),
           child: Text(
-            category?['icon'] ?? (isExpense ? '💸' : '💰'),
+            category?['icon']?.toString() ?? (isExpense ? '💸' : '💰'),
             style: const TextStyle(fontSize: 20),
           ),
         ),
         title: Text(
-          category?['name'] ?? 'Không xác định',
+          category?['name']?.toString() ?? 'Không xác định',
           style: const TextStyle(fontWeight: FontWeight.w500),
         ),
         subtitle: description.isNotEmpty

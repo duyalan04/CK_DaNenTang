@@ -299,31 +299,31 @@ exports.calculateHealthScore = async (req, res) => {
         let grade = '';
         if (totalScore >= 80) {
             grade = 'A';
-            feedback = 'Tuyệt vời! Bạn đang quản lý tài chính rất tốt! 🌟';
+            feedback = 'Tuyệt vời! Bạn đang quản lý tài chính rất tốt!';
         } else if (totalScore >= 60) {
             grade = 'B';
-            feedback = 'Khá tốt! Còn một số điểm có thể cải thiện. 👍';
+            feedback = 'Khá tốt! Còn một số điểm có thể cải thiện.';
         } else if (totalScore >= 40) {
             grade = 'C';
-            feedback = 'Trung bình. Cần chú ý hơn đến việc quản lý chi tiêu. ⚠️';
+            feedback = 'Trung bình. Cần chú ý hơn đến việc quản lý chi tiêu.';
         } else {
             grade = 'D';
-            feedback = 'Cần cải thiện. Hãy xem xét lại thói quen chi tiêu của bạn. 🔴';
+            feedback = 'Cần cải thiện. Hãy xem xét lại thói quen chi tiêu của bạn.';
         }
 
         // Gợi ý cải thiện
         const improvements = [];
         if (savingsRateScore < 20) {
-            improvements.push('💰 Cố gắng tiết kiệm ít nhất 20% thu nhập');
+            improvements.push('Cố gắng tiết kiệm ít nhất 20% thu nhập');
         }
         if (budgetComplianceScore < 20) {
-            improvements.push('📊 Tuân thủ ngân sách đã đề ra');
+            improvements.push('Tuân thủ ngân sách đã đề ra');
         }
         if (spendingStabilityScore < 20) {
-            improvements.push('📈 Duy trì chi tiêu ổn định hàng tháng');
+            improvements.push('Duy trì chi tiêu ổn định hàng tháng');
         }
         if (diversificationScore < 20) {
-            improvements.push('🎯 Phân bổ chi tiêu đều hơn giữa các danh mục');
+            improvements.push('Phân bổ chi tiêu đều hơn giữa các danh mục');
         }
 
         res.json({
@@ -403,7 +403,7 @@ exports.generateInsights = async (req, res) => {
                 data: {
                     insights: [{
                         type: 'info',
-                        icon: '📊',
+                        icon: 'info',
                         title: 'Chưa đủ dữ liệu',
                         content: 'Hãy ghi chép thêm giao dịch để nhận insights cá nhân hóa!'
                     }]
@@ -616,7 +616,7 @@ function formatCurrency(value) {
  */
 function getSavingTip(categoryName, reduction) {
     const tips = {
-        'Ăn uống': 'Thử nấu ăn tại nhà nhiều hơn, mang cơm đi làm',
+        'Ăn uống': 'Nấu ăn tại nhà nhiều hơn, mang cơm đi làm',
         'Di chuyển': 'Sử dụng phương tiện công cộng hoặc đi chung xe',
         'Giải trí': 'Tìm các hoạt động giải trí miễn phí hoặc giảm giá',
         'Mua sắm': 'Lập danh sách trước khi mua, tránh mua sắm bốc đồng',

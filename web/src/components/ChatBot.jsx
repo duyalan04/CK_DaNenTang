@@ -1,13 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { MessageCircle, X, Send, Bot, User, Loader2 } from 'lucide-react'
 import api from '../lib/api'
 
 export default function ChatBot() {
+    const queryClient = useQueryClient()
     const [isOpen, setIsOpen] = useState(false)
     const [messages, setMessages] = useState([
         {
             role: 'assistant',
-            content: 'Xin chào! 👋 Tôi là FinBot - trợ lý tài chính AI của bạn. Tôi có thể giúp bạn:\n\n• Tư vấn quản lý chi tiêu\n• Lập kế hoạch ngân sách\n• Trả lời câu hỏi về tài chính\n\nBạn cần hỗ trợ gì hôm nay?'
+            content: 'Hey! Mình là FinBot, bạn thân tài chính của cậu đây.\n\nCậu có thể nhắn kiểu "50k cafe" hay "lương 15tr" để mình ghi giúp, hoặc hỏi gì về tiền nong cũng được nha!'
         }
     ])
     const [input, setInput] = useState('')
@@ -22,6 +24,27 @@ export default function ChatBot() {
     useEffect(() => {
         scrollToBottom()
     }, [messages])
+
+    // Refresh dashboard data - force refetch immediately
+    const refreshDashboard = async () => {
+        console.log('Refreshing dashboard data...')
+        // Reset cache và fetch lại
+        await queryClient.resetQueries({ queryKey: ['summary'] })
+        await queryClient.resetQueries({ queryKey: ['byCategory'] })
+        await queryClient.resetQueries({ queryKey: ['healthScore'] })
+        await queryClient.resetQueries({ queryKey: ['anomalies'] })
+        
+        // Refetch active queries
+        queryClient.refetchQueries({ queryKey: ['summary'], type: 'active' })
+        queryClient.refetchQueries({ queryKey: ['byCategory'], type: 'active' })
+        queryClient.refetchQueries({ queryKey: ['healthScore'], type: 'active' })
+        queryClient.refetchQueries({ queryKey: ['anomalies'], type: 'active' })
+        queryClient.refetchQueries({ queryKey: ['trend'], type: 'active' })
+        queryClient.refetchQueries({ queryKey: ['insights'], type: 'active' })
+        queryClient.refetchQueries({ queryKey: ['savings'], type: 'active' })
+        queryClient.refetchQueries({ queryKey: ['smartBudget'], type: 'active' })
+        console.log('Dashboard refresh triggered!')
+    }
 
     const handleSend = async () => {
         if (!input.trim() || isLoading) return
@@ -45,6 +68,16 @@ export default function ChatBot() {
                     content: response.data.data.message
                 }])
                 setConversationId(response.data.data.conversationId)
+                
+                // Nếu AI tạo giao dịch, refresh dashboard
+                console.log('Chat response:', response.data.data)
+                if (response.data.data.transactionCreated) {
+                    console.log('Transaction created!', response.data.data.transactionCreated)
+                    // Delay để DB cập nhật xong
+                    setTimeout(async () => {
+                        await refreshDashboard()
+                    }, 800)
+                }
             } else {
                 throw new Error(response.data.error)
             }
@@ -52,7 +85,7 @@ export default function ChatBot() {
             console.error('Chat error:', error)
             setMessages(prev => [...prev, {
                 role: 'assistant',
-                content: 'Xin lỗi, có lỗi xảy ra. Vui lòng thử lại sau. 😔'
+                content: 'Xin lỗi, có lỗi xảy ra. Vui lòng thử lại sau.'
             }])
         } finally {
             setIsLoading(false)

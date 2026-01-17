@@ -8,64 +8,292 @@ const groq = new Groq({
 // Lưu trữ conversation history
 const conversationHistory = new Map();
 
-const SYSTEM_PROMPT = `Bạn là trợ lý AI quản lý tài chính cá nhân thông minh tên là "FinBot".
+const FINANCE_KNOWLEDGE = `
+KIẾN THỨC TÀI CHÍNH CÁ NHÂN VIỆT NAM:
 
-QUAN TRỌNG - KHẢ NĂNG CỦA BẠN:
+1. QUY TẮC QUẢN LÝ TIỀN:
+- Quy tắc 50/30/20: 50% nhu cầu thiết yếu, 30% mong muốn, 20% tiết kiệm/đầu tư
+- Quy tắc 6 chiếc lọ: Thiết yếu 55%, Tiết kiệm dài hạn 10%, Giáo dục 10%, Hưởng thụ 10%, Đầu tư 10%, Từ thiện 5%
+- Quỹ khẩn cấp: Nên có 3-6 tháng chi tiêu
+
+2. LÃI SUẤT & LẠM PHÁT VN (2024-2025):
+- Lãi suất tiết kiệm: 4-6%/năm (kỳ hạn 12 tháng)
+- Lạm phát: 3-4%/năm
+- Lãi suất vay mua nhà: 8-12%/năm
+- Lãi suất thẻ tín dụng: 20-30%/năm (rất cao, tránh nợ)
+
+3. CHI TIÊU TRUNG BÌNH (tham khảo):
+- Sinh viên: 3-5 triệu/tháng
+- Người đi làm độc thân: 8-15 triệu/tháng
+- Gia đình nhỏ: 15-25 triệu/tháng
+- Tiền thuê nhà: 20-30% thu nhập
+- Ăn uống: 25-35% thu nhập
+
+4. TIẾT KIỆM & ĐẦU TƯ:
+- Gửi tiết kiệm ngân hàng: An toàn, lãi thấp
+- Chứng chỉ quỹ: Rủi ro trung bình, lãi 8-15%/năm
+- Cổ phiếu: Rủi ro cao, cần kiến thức
+- Vàng: Bảo toàn giá trị, chống lạm phát
+- Bất động sản: Vốn lớn, dài hạn
+
+5. BẢO HIỂM:
+- BHXH bắt buộc: 10.5% lương
+- BHYT: 1.5% lương
+- Bảo hiểm nhân thọ: 5-10% thu nhập (tùy chọn)
+
+6. THUẾ THU NHẬP CÁ NHÂN:
+- Mức giảm trừ bản thân: 11 triệu/tháng
+- Giảm trừ người phụ thuộc: 4.4 triệu/người/tháng
+- Thu nhập chịu thuế = Tổng thu nhập - Giảm trừ - BHXH
+
+7. MẸO TIẾT KIỆM:
+- Ghi chép chi tiêu hàng ngày
+- Đặt mục tiêu tiết kiệm cụ thể
+- Tự động chuyển tiền tiết kiệm đầu tháng
+- So sánh giá trước khi mua
+- Hạn chế mua sắm online bốc đồng
+- Nấu ăn tại nhà thay vì ăn ngoài
+`;
+
+const SYSTEM_PROMPT = `Bạn là FinBot - một người bạn thân am hiểu tài chính, không phải robot hay trợ lý AI cứng nhắc.
+
+TÍNH CÁCH CỦA BẠN:
+- Nói chuyện như bạn bè thân, thoải mái, vui vẻ
+- Dùng ngôn ngữ đời thường, có thể dùng tiếng lóng nhẹ (oke, ngon, xịn, chill...)
+- Đôi khi đùa nhẹ, trêu chọc vui vẻ khi phù hợp
+- Thấu hiểu và đồng cảm khi người dùng gặp khó khăn tài chính
+- Không giảng đạo, không phán xét thói quen chi tiêu
+- Khen ngợi khi họ làm tốt, động viên khi họ cần
+- Trả lời ngắn gọn, không dài dòng
+- KHÔNG DÙNG EMOJI - chỉ dùng text thuần
+
+CÁCH NÓI CHUYỆN:
+- Thay vì "Tôi" → dùng "mình" hoặc "tớ"
+- Thay vì "Bạn" → dùng "bạn", "cậu", hoặc tên nếu biết
+- Có thể dùng: "nha", "nhé", "á", "đó", "hen"
+- Ví dụ: "Oke ghi rồi nha!", "Xịn đấy!", "Chill thôi, từ từ tính"
+
+${FINANCE_KNOWLEDGE}
+
+KHẢ NĂNG:
 1. Tư vấn quản lý chi tiêu, tiết kiệm
-2. Trả lời câu hỏi về tài chính
-3. **TẠO GIAO DỊCH**: Khi người dùng muốn ghi chi tiêu/thu nhập
+2. Giải đáp thắc mắc tài chính
+3. Gợi ý cách tiết kiệm, đầu tư
+4. Ghi nhận giao dịch thu chi
 
-KHI NGƯỜI DÙNG MUỐN GHI CHI TIÊU/THU NHẬP:
-- Nếu họ nói "ghi chi tiêu", "thêm chi tiêu", "mua xxx", "tiêu xxx", "chi xxx"
-- Bạn PHẢI trả lời theo format JSON đặc biệt để hệ thống tự động tạo giao dịch
+KHI GHI GIAO DỊCH:
+Nhận diện: "ghi", "thêm", "mua", "tiêu", "chi", "nhận lương", "thu nhập", hoặc chỉ nói số tiền + mục đích
 
-FORMAT TẠO GIAO DỊCH (BẮT BUỘC theo đúng format):
+FORMAT (ẩn với user):
 [CREATE_TRANSACTION]
-{
-  "action": "create_transaction",
-  "type": "expense",
-  "amount": 50000,
-  "category": "Ăn uống",
-  "description": "Mô tả ngắn"
+{"action": "create_transaction", "type": "expense", "amount": 50000, "category": "Ăn uống", "description": "Mô tả"}
+[/CREATE_TRANSACTION]
+
+DANH MỤC:
+- Chi tiêu: "Ăn uống", "Di chuyển", "Mua sắm", "Giải trí", "Sức khỏe", "Giáo dục", "Hóa đơn", "Khác"
+- Thu nhập: "Lương", "Thưởng", "Đầu tư", "Khác"
+
+VÍ DỤ HỘI THOẠI TỰ NHIÊN:
+
+User: "50k cafe"
+Bot:
+[CREATE_TRANSACTION]
+{"action": "create_transaction", "type": "expense", "amount": 50000, "category": "Ăn uống", "description": "Cafe"}
+[/CREATE_TRANSACTION]
+Ghi rồi nha, 50k cafe.
+
+User: "vừa thua tài xỉu 500k"
+Bot:
+[CREATE_TRANSACTION]
+{"action": "create_transaction", "type": "expense", "amount": 500000, "category": "Giải trí", "description": "Tài xỉu"}
+[/CREATE_TRANSACTION]
+Ối, ghi rồi 500k. Lần sau chill lại nha, đỏ đen mà, hên xui thôi.
+
+User: "lương 15tr"
+Bot:
+[CREATE_TRANSACTION]
+{"action": "create_transaction", "type": "income", "amount": 15000000, "category": "Lương", "description": "Lương tháng"}
+[/CREATE_TRANSACTION]
+Nice, 15 triệu vào túi rồi! Nhớ để dành khoảng 3 triệu tiết kiệm nha.
+
+User: "tháng này tiêu nhiều quá"
+Bot: Chill đi, ai cũng có lúc vậy mà. Hay là mình cùng đặt mục tiêu tháng sau giảm bớt nhé?
+
+User: "làm sao tiết kiệm được"
+Bot: Mình hay làm thế này nè:
+- Đầu tháng nhận lương, chuyển ngay 20% vào tài khoản khác, coi như không có
+- Nấu cơm mang đi làm, tiết kiệm được 2-3 triệu/tháng luôn á
+- Trước khi mua gì, đợi 24h xem còn muốn không
+
+Cậu đang khó ở chỗ nào nhất?
+
+User: "oke thanks"
+Bot: Không có gì, cần gì cứ hú mình nha!
+
+QUY TẮC CHUYỂN ĐỔI SỐ TIỀN:
+- "k" hoặc "K" = nghìn (x1,000): "50k" = 50000
+- "tr" hoặc "triệu" hoặc "chẹo" hoặc "trịu" = triệu (x1,000,000): "1tr" = 1000000, "30tr" = 30000000
+- "củ" = triệu: "5 củ" = 5000000
+- "tỷ" = tỷ (x1,000,000,000)
+
+LƯU Ý QUAN TRỌNG:
+- TUYỆT ĐỐI KHÔNG DÙNG EMOJI trong câu trả lời
+- Nếu thiếu thông tin, hỏi ngắn gọn tự nhiên
+- Đưa lời khuyên thực tế, không lý thuyết suông`;
+
+
+
+/**
+ * Lấy dữ liệu tài chính của user để cung cấp context cho AI
+ */
+async function getUserFinancialContext(userId) {
+  if (!userId) return null;
+
+  try {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1).toISOString().split('T')[0];
+
+    // Lấy giao dịch tháng này
+    const { data: thisMonthTx } = await supabase
+      .from('transactions')
+      .select('amount, type, categories(name)')
+      .eq('user_id', userId)
+      .gte('transaction_date', startOfMonth);
+
+    // Lấy giao dịch 3 tháng gần đây
+    const { data: recentTx } = await supabase
+      .from('transactions')
+      .select('amount, type, categories(name), transaction_date')
+      .eq('user_id', userId)
+      .gte('transaction_date', threeMonthsAgo)
+      .order('transaction_date', { ascending: false });
+
+    // Tính toán
+    const thisMonthIncome = thisMonthTx?.filter(t => t.type === 'income').reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
+    const thisMonthExpense = thisMonthTx?.filter(t => t.type === 'expense').reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
+
+    // Chi tiêu theo danh mục tháng này
+    const expenseByCategory = {};
+    thisMonthTx?.filter(t => t.type === 'expense').forEach(t => {
+      const cat = t.categories?.name || 'Khác';
+      expenseByCategory[cat] = (expenseByCategory[cat] || 0) + parseFloat(t.amount);
+    });
+
+    // Top 5 danh mục chi tiêu
+    const topCategories = Object.entries(expenseByCategory)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, amount]) => `${name}: ${formatVND(amount)}`);
+
+    // Tính trung bình 3 tháng
+    const totalExpense3m = recentTx?.filter(t => t.type === 'expense').reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
+    const avgMonthlyExpense = totalExpense3m / 3;
+
+    return {
+      thisMonth: {
+        income: thisMonthIncome,
+        expense: thisMonthExpense,
+        balance: thisMonthIncome - thisMonthExpense
+      },
+      topCategories,
+      avgMonthlyExpense,
+      transactionCount: recentTx?.length || 0
+    };
+  } catch (error) {
+    console.error('Error getting user financial context:', error);
+    return null;
+  }
 }
-[/CREATE_TRANSACTION]
 
-Sau đó thêm tin nhắn xác nhận cho người dùng.
+function formatVND(amount) {
+  return new Intl.NumberFormat('vi-VN').format(amount) + 'đ';
+}
 
-DANH MỤC HỢP LỆ:
-- Chi tiêu (expense): "Ăn uống", "Di chuyển", "Mua sắm", "Giải trí", "Sức khỏe", "Giáo dục", "Hóa đơn", "Khác"
-- Thu nhập (income): "Lương", "Thưởng", "Đầu tư", "Khác"
+/**
+ * Parse user message để tìm giao dịch
+ * Ví dụ: "50k cafe", "lương 15tr", "chi 100k ăn trưa"
+ */
+function parseUserMessage(message) {
+  if (!message) return null;
+  
+  const text = message.toLowerCase();
+  
+  // Kiểm tra có phải là message giao dịch không
+  const hasAmount = /\d+\s*(k|K|tr|triệu|củ|nghìn|ngàn|m|M|\d{4,})/.test(message);
+  if (!hasAmount) return null;
+  
+  // Xác định loại giao dịch
+  let type = 'expense';
+  if (/lương|thu nhập|nhận|thưởng|bonus|salary|income|tiền về|chuyển khoản đến|nhận được/.test(text)) {
+    type = 'income';
+  }
+  
+  // Parse số tiền
+  let amount = 0;
+  
+  // Pattern: 50k, 50K, 50 nghìn, 50 ngàn
+  const kPattern = /(\d+(?:[.,]\d+)?)\s*(?:k|K|nghìn|ngàn)/;
+  // Pattern: 1tr, 1 triệu, 1m, 1 củ
+  const trPattern = /(\d+(?:[.,]\d+)?)\s*(?:tr|triệu|m|M|củ)/i;
+  // Pattern: số thuần lớn (50000+)
+  const numPattern = /(\d{4,})/;
 
-VÍ DỤ:
-User: "ghi chi tiêu 50k ăn sáng"
-Bot: 
-[CREATE_TRANSACTION]
-{"action": "create_transaction", "type": "expense", "amount": 50000, "category": "Ăn uống", "description": "Ăn sáng"}
-[/CREATE_TRANSACTION]
-
-✅ Đã ghi chi tiêu 50,000đ cho Ăn sáng vào danh mục Ăn uống!
-
-User: "mua cafe 35k"
-Bot:
-[CREATE_TRANSACTION]
-{"action": "create_transaction", "type": "expense", "amount": 35000, "category": "Ăn uống", "description": "Mua cafe"}
-[/CREATE_TRANSACTION]
-
-✅ Đã ghi chi tiêu 35,000đ cho Mua cafe!
-
-User: "nhận lương 10 triệu"
-Bot:
-[CREATE_TRANSACTION]
-{"action": "create_transaction", "type": "income", "amount": 10000000, "category": "Lương", "description": "Nhận lương tháng"}
-[/CREATE_TRANSACTION]
-
-✅ Đã ghi thu nhập 10,000,000đ - Lương!
-
-QUY TẮC:
-- Trả lời bằng tiếng Việt, thân thiện, dùng emoji
-- Chuyển đổi: "50k" = 50000, "1tr" = 1000000, "1 triệu" = 1000000
-- Nếu thiếu thông tin, hỏi lại người dùng
-- Luôn xác nhận sau khi tạo giao dịch`;
+  if (trPattern.test(message)) {
+    const match = message.match(trPattern);
+    amount = parseFloat(match[1].replace(',', '.')) * 1000000;
+  } else if (kPattern.test(message)) {
+    const match = message.match(kPattern);
+    amount = parseFloat(match[1].replace(',', '.')) * 1000;
+  } else if (numPattern.test(message)) {
+    const match = message.match(numPattern);
+    amount = parseFloat(match[1]);
+  }
+  
+  if (amount <= 0) return null;
+  
+  // Xác định category
+  let category = type === 'income' ? 'Lương' : 'Khác';
+  
+  const categoryKeywords = {
+    'ăn|uống|cafe|cà phê|trưa|tối|sáng|cơm|phở|bún|bánh|đồ ăn|food': 'Ăn uống',
+    'grab|taxi|xăng|xe|gojek|be|uber|di chuyển|đi lại': 'Di chuyển',
+    'mua|shopping|quần|áo|giày|dép|đồ|order': 'Mua sắm',
+    'game|phim|netflix|spotify|giải trí|chơi|tài xỉu|cá độ|đánh bài': 'Giải trí',
+    'thuốc|bệnh|viện|khám|sức khỏe|doctor': 'Sức khỏe',
+    'học|sách|khóa|course|giáo dục': 'Giáo dục',
+    'điện|nước|internet|wifi|hóa đơn|bill': 'Hóa đơn',
+    'nhà|thuê|rent': 'Nhà cửa',
+    'lương|salary': 'Lương',
+    'thưởng|bonus': 'Thưởng',
+  };
+  
+  for (const [keywords, catName] of Object.entries(categoryKeywords)) {
+    const regex = new RegExp(keywords, 'i');
+    if (regex.test(text)) {
+      category = catName;
+      break;
+    }
+  }
+  
+  // Tạo description từ message (bỏ số tiền)
+  let description = message
+    .replace(/\d+(?:[.,]\d+)?\s*(?:k|K|nghìn|ngàn|tr|triệu|m|M|củ)?/gi, '')
+    .replace(/chi|tiêu|mua|ghi|thêm|lương|thu nhập/gi, '')
+    .trim();
+  
+  if (!description || description.length < 2) {
+    description = category;
+  }
+  
+  return {
+    action: 'create_transaction',
+    type,
+    amount,
+    category,
+    description
+  };
+}
 
 /**
  * Gửi tin nhắn và nhận phản hồi từ AI
@@ -80,6 +308,24 @@ exports.sendMessage = async (req, res) => {
         success: false,
         error: 'Message is required' 
       });
+    }
+
+    // Lấy dữ liệu tài chính của user
+    const financialContext = await getUserFinancialContext(userId);
+    
+    // Tạo context message nếu có dữ liệu
+    let userContextPrompt = '';
+    if (financialContext && financialContext.transactionCount > 0) {
+      userContextPrompt = `
+DỮ LIỆU TÀI CHÍNH CỦA NGƯỜI DÙNG (tháng này):
+- Thu nhập: ${formatVND(financialContext.thisMonth.income)}
+- Chi tiêu: ${formatVND(financialContext.thisMonth.expense)}
+- Còn lại: ${formatVND(financialContext.thisMonth.balance)}
+- Chi tiêu TB/tháng (3 tháng): ${formatVND(financialContext.avgMonthlyExpense)}
+- Top chi tiêu: ${financialContext.topCategories.join(', ') || 'Chưa có'}
+
+Hãy sử dụng dữ liệu này để đưa ra lời khuyên cá nhân hóa.
+`;
     }
 
     // Lấy hoặc tạo conversation history
@@ -97,11 +343,15 @@ exports.sendMessage = async (req, res) => {
       history = history.slice(-20);
     }
 
-    // Gọi Groq API
+    // Gọi Groq API với context tài chính
+    const systemPromptWithContext = userContextPrompt 
+      ? SYSTEM_PROMPT + '\n\n' + userContextPrompt 
+      : SYSTEM_PROMPT;
+
     const completion = await groq.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPromptWithContext },
         ...history
       ],
       temperature: 0.7,
@@ -114,28 +364,54 @@ exports.sendMessage = async (req, res) => {
     let transactionCreated = null;
     const transactionMatch = aiResponse.match(/\[CREATE_TRANSACTION\]([\s\S]*?)\[\/CREATE_TRANSACTION\]/);
     
-    if (transactionMatch && userId) {
+    // Nếu AI không tạo transaction block, thử parse từ message user
+    let transactionData = null;
+    
+    if (transactionMatch) {
       try {
-        const transactionData = JSON.parse(transactionMatch[1].trim());
+        transactionData = JSON.parse(transactionMatch[1].trim());
+      } catch (e) {
+        console.log('Failed to parse AI transaction block:', e);
+      }
+    }
+    
+    // Fallback: Parse trực tiếp từ user message nếu có dấu hiệu giao dịch
+    if (!transactionData && userId) {
+      const parsed = parseUserMessage(message);
+      if (parsed && parsed.amount > 0) {
+        transactionData = parsed;
+        console.log('Parsed from user message:', transactionData);
+      }
+    }
+    
+    if (transactionData && transactionData.amount > 0 && userId) {
+      try {
+        // Tìm category ID
+        const { data: categories } = await supabase
+          .from('categories')
+          .select('id, name, type')
+          .eq('user_id', userId);
         
-        if (transactionData.action === 'create_transaction') {
-          // Tìm category ID
-          const { data: categories } = await supabase
-            .from('categories')
-            .select('id, name')
-            .eq('user_id', userId);
-          
-          let categoryId = null;
-          const categoryName = transactionData.category || 'Khác';
-          
-          // Tìm category phù hợp
-          const matchedCategory = categories?.find(c => 
+        let categoryId = null;
+        const categoryName = transactionData.category || 'Khác';
+        const txType = transactionData.type || 'expense';
+        
+        // Tìm category phù hợp (cùng type)
+        const matchedCategory = categories?.find(c => 
+          c.type === txType && (
             c.name.toLowerCase().includes(categoryName.toLowerCase()) ||
             categoryName.toLowerCase().includes(c.name.toLowerCase())
-          );
-          
-          if (matchedCategory) {
-            categoryId = matchedCategory.id;
+          )
+        );
+        
+        if (matchedCategory) {
+          categoryId = matchedCategory.id;
+        } else {
+          // Tìm category "Khác" hoặc "Lương" theo type
+          const fallbackName = txType === 'income' ? 'Lương' : 'Khác';
+          const fallbackCat = categories?.find(c => c.type === txType && c.name === fallbackName);
+          if (fallbackCat) {
+            categoryId = fallbackCat.id;
           } else {
             // Tạo category mới nếu chưa có
             const { data: newCat } = await supabase
@@ -143,16 +419,17 @@ exports.sendMessage = async (req, res) => {
               .insert({
                 user_id: userId,
                 name: categoryName,
-                type: transactionData.type || 'expense',
-                icon: '📝',
-                color: '#808080'
+                type: txType,
+                icon: txType === 'income' ? '💰' : '📝',
+                color: txType === 'income' ? '#2ECC71' : '#808080'
               })
               .select()
               .single();
             categoryId = newCat?.id;
           }
+        }
 
-          if (categoryId) {
+        if (categoryId) {
             // Tạo giao dịch
             const { data: transaction, error } = await supabase
               .from('transactions')
@@ -160,7 +437,7 @@ exports.sendMessage = async (req, res) => {
                 user_id: userId,
                 category_id: categoryId,
                 amount: transactionData.amount,
-                type: transactionData.type || 'expense',
+                type: txType,
                 description: transactionData.description || '',
                 transaction_date: new Date().toISOString().split('T')[0]
               })
@@ -171,7 +448,7 @@ exports.sendMessage = async (req, res) => {
               transactionCreated = {
                 id: transaction.id,
                 amount: transactionData.amount,
-                type: transactionData.type,
+                type: txType,
                 category: categoryName,
                 description: transactionData.description
               };
@@ -180,9 +457,8 @@ exports.sendMessage = async (req, res) => {
               console.error('❌ Failed to create transaction:', error);
             }
           }
-        }
       } catch (parseError) {
-        console.error('❌ Failed to parse transaction:', parseError);
+        console.error('❌ Failed to process transaction:', parseError);
       }
 
       // Xóa phần JSON khỏi response để user không thấy
@@ -192,7 +468,7 @@ exports.sendMessage = async (req, res) => {
     // Nếu không có userId nhưng AI muốn tạo giao dịch
     if (transactionMatch && !userId) {
       aiResponse = aiResponse.replace(/\[CREATE_TRANSACTION\][\s\S]*?\[\/CREATE_TRANSACTION\]/, '').trim();
-      aiResponse += '\n\n⚠️ Bạn cần đăng nhập để tôi có thể ghi chi tiêu cho bạn.';
+      aiResponse += '\n\nBạn cần đăng nhập để tôi có thể ghi chi tiêu cho bạn.';
     }
 
     // Thêm response vào history

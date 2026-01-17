@@ -110,6 +110,7 @@ export default function AnomalyAlertCard() {
     const { data, isLoading, error } = useQuery({
         queryKey: ['anomalies'],
         queryFn: () => api.get('/analytics/anomalies').then(res => res.data),
+        staleTime: 5 * 60 * 1000, // Cache 5 phút
         refetchInterval: 300000 // Refresh mỗi 5 phút
     })
 
@@ -163,7 +164,7 @@ export default function AnomalyAlertCard() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                     </div>
-                    <p className="text-gray-600">Không có giao dịch bất thường! 🎉</p>
+                    <p className="text-gray-600">Không có giao dịch bất thường!</p>
                     <p className="text-sm text-gray-400 mt-1">Chi tiêu của bạn đang ổn định</p>
                 </div>
             </div>

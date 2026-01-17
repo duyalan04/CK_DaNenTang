@@ -3,13 +3,22 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'env.dart';
 
 class ApiService {
-  late final Dio _dio;
+  late Dio _dio;
+  bool _isReconnecting = false;
+  
+  // Cache để giảm request
+  final Map<String, _CacheEntry> _cache = {};
+  static const _cacheDuration = Duration(seconds: 30);
 
   ApiService() {
+    _initDio();
+  }
+
+  void _initDio() {
     _dio = Dio(BaseOptions(
       baseUrl: Env.apiUrl,
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 60),
+      connectTimeout: const Duration(seconds: 8),
+      receiveTimeout: const Duration(seconds: 15),
       headers: {
         'Content-Type': 'application/json',
       },
@@ -17,23 +26,60 @@ class ApiService {
 
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
+        options.baseUrl = Env.apiUrl;
+        
         final session = Supabase.instance.client.auth.currentSession;
         if (session != null) {
           options.headers['Authorization'] = 'Bearer ${session.accessToken}';
         }
-        print('🌐 API Request: ${options.method} ${options.path}');
         return handler.next(options);
       },
-      onResponse: (response, handler) {
-        print('✅ API Response: ${response.statusCode} ${response.requestOptions.path}');
-        return handler.next(response);
-      },
-      onError: (error, handler) {
-        print('❌ API Error: ${error.type} - ${error.message}');
-        print('   URL: ${error.requestOptions.uri}');
+      onError: (error, handler) async {
+        if (_shouldReconnect(error) && !_isReconnecting) {
+          _isReconnecting = true;
+          
+          final success = await Env.reconnect();
+          _isReconnecting = false;
+          
+          if (success) {
+            try {
+              final opts = error.requestOptions;
+              opts.baseUrl = Env.apiUrl;
+              final response = await _dio.fetch(opts);
+              return handler.resolve(response);
+            } catch (e) {
+              return handler.next(error);
+            }
+          }
+        }
+        
         return handler.next(error);
       },
     ));
+  }
+
+  bool _shouldReconnect(DioException error) {
+    return error.type == DioExceptionType.connectionTimeout ||
+           error.type == DioExceptionType.connectionError ||
+           error.type == DioExceptionType.receiveTimeout;
+  }
+
+  // Cache helper
+  T? _getFromCache<T>(String key) {
+    final entry = _cache[key];
+    if (entry != null && DateTime.now().difference(entry.timestamp) < _cacheDuration) {
+      return entry.data as T;
+    }
+    _cache.remove(key);
+    return null;
+  }
+
+  void _setCache(String key, dynamic data) {
+    _cache[key] = _CacheEntry(data: data, timestamp: DateTime.now());
+  }
+
+  void clearCache() {
+    _cache.clear();
   }
 
   /// Helper để xử lý lỗi chung
@@ -43,30 +89,36 @@ class ApiService {
     } on DioException catch (e) {
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout) {
-        throw Exception('Kết nối quá lâu. Kiểm tra backend đang chạy và API URL đúng.');
+        throw Exception('Kết nối quá lâu. Kiểm tra backend đang chạy.');
       }
       if (e.type == DioExceptionType.connectionError) {
-        throw Exception('Không thể kết nối server. Kiểm tra:\n'
-            '1. Backend đang chạy (npm run dev)\n'
-            '2. API URL trong env.dart đúng IP\n'
-            '3. Thiết bị và máy tính cùng mạng WiFi');
+        throw Exception('Không thể kết nối server.');
       }
       if (e.response?.statusCode == 401) {
-        throw Exception('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+        throw Exception('Phiên đăng nhập hết hạn.');
       }
       throw Exception(e.response?.data?['error'] ?? e.message ?? 'Lỗi không xác định');
     }
   }
 
   // ============ TRANSACTIONS ============
-  Future<List<dynamic>> getTransactions() async {
+  Future<List<dynamic>> getTransactions({bool forceRefresh = false}) async {
+    const cacheKey = 'transactions';
+    if (!forceRefresh) {
+      final cached = _getFromCache<List<dynamic>>(cacheKey);
+      if (cached != null) return cached;
+    }
+    
     return _safeRequest(() async {
       final response = await _dio.get('/transactions');
-      return response.data;
+      final data = response.data as List<dynamic>;
+      _setCache(cacheKey, data);
+      return data;
     });
   }
 
   Future<Map<String, dynamic>> createTransaction(Map<String, dynamic> data) async {
+    clearCache(); // Clear cache khi tạo mới
     return _safeRequest(() async {
       final response = await _dio.post('/transactions', data: data);
       return response.data;
@@ -74,10 +126,18 @@ class ApiService {
   }
 
   // ============ CATEGORIES ============
-  Future<List<dynamic>> getCategories() async {
+  Future<List<dynamic>> getCategories({bool forceRefresh = false}) async {
+    const cacheKey = 'categories';
+    if (!forceRefresh) {
+      final cached = _getFromCache<List<dynamic>>(cacheKey);
+      if (cached != null) return cached;
+    }
+    
     return _safeRequest(() async {
       final response = await _dio.get('/categories');
-      return response.data;
+      final data = response.data as List<dynamic>;
+      _setCache(cacheKey, data);
+      return data;
     });
   }
 
@@ -93,6 +153,7 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> createFromOCR(Map<String, dynamic> data) async {
+    clearCache();
     return _safeRequest(() async {
       final response = await _dio.post('/transactions/ocr', data: data);
       return response.data;
@@ -100,10 +161,18 @@ class ApiService {
   }
 
   // ============ REPORTS ============
-  Future<Map<String, dynamic>> getSummary() async {
+  Future<Map<String, dynamic>> getSummary({bool forceRefresh = false}) async {
+    const cacheKey = 'summary';
+    if (!forceRefresh) {
+      final cached = _getFromCache<Map<String, dynamic>>(cacheKey);
+      if (cached != null) return cached;
+    }
+    
     return _safeRequest(() async {
       final response = await _dio.get('/reports/summary');
-      return response.data;
+      final data = response.data as Map<String, dynamic>;
+      _setCache(cacheKey, data);
+      return data;
     });
   }
 
@@ -305,6 +374,29 @@ class ApiService {
       return response.data;
     });
   }
+
+  // ============ VOICE INPUT ============
+  Future<Map<String, dynamic>> parseVoiceTransaction(String text) async {
+    return _safeRequest(() async {
+      final response = await _dio.post('/transactions/parse-voice', data: {'text': text});
+      return response.data;
+    });
+  }
+
+  // ============ SMS BANKING ============
+  Future<List<dynamic>> parseBankingSms(List<Map<String, dynamic>> messages) async {
+    return _safeRequest(() async {
+      final response = await _dio.post('/transactions/parse-sms', data: {'messages': messages});
+      return response.data;
+    });
+  }
 }
 
+class _CacheEntry {
+  final dynamic data;
+  final DateTime timestamp;
+  _CacheEntry({required this.data, required this.timestamp});
+}
+
+/// Global ApiService instance
 final apiService = ApiService();

@@ -204,19 +204,27 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
 }
 
 class _BudgetCard extends StatelessWidget {
-  final Map<String, dynamic> budget;
+  final dynamic budget;
   final String Function(num) formatCurrency;
 
   const _BudgetCard({required this.budget, required this.formatCurrency});
 
+  double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final category = budget['categories'];
-    final spent = (budget['spent'] ?? 0).toDouble();
-    final amount = (budget['amount'] ?? 0).toDouble();
-    final percentage = (budget['percentage'] ?? 0).toDouble();
-    final remaining = (budget['remaining'] ?? 0).toDouble();
-    final colorHex = category?['color'] ?? '#808080';
+    final b = budget as Map<String, dynamic>? ?? {};
+    final category = b['categories'] as Map<String, dynamic>?;
+    final spent = _parseDouble(b['spent']);
+    final amount = _parseDouble(b['amount']);
+    final percentage = _parseDouble(b['percentage']);
+    final remaining = _parseDouble(b['remaining']);
+    final colorHex = category?['color']?.toString() ?? '#808080';
     final color = Color(int.parse(colorHex.replaceFirst('#', '0xFF')));
 
     Color progressColor;

@@ -257,7 +257,7 @@ class _BudgetRuleItem extends StatelessWidget {
 }
 
 class _SuggestionItem extends StatelessWidget {
-  final Map<String, dynamic> suggestion;
+  final dynamic suggestion;
   final String Function(num) formatCurrency;
 
   const _SuggestionItem({
@@ -265,13 +265,21 @@ class _SuggestionItem extends StatelessWidget {
     required this.formatCurrency,
   });
 
+  double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final categoryName = suggestion['categoryName'] ?? 'Không xác định';
-    final currentAvg = (suggestion['currentMonthlyAvg'] ?? 0).toDouble();
-    final suggestedBudget = (suggestion['suggestedBudget'] ?? 0).toDouble();
-    final percentOfIncome = (suggestion['percentOfIncome'] ?? 0).toDouble();
-    final recommendation = suggestion['recommendation'] ?? 'maintain';
+    final s = suggestion as Map<String, dynamic>? ?? {};
+    final categoryName = s['categoryName']?.toString() ?? 'Không xác định';
+    final currentAvg = _parseDouble(s['currentMonthlyAvg']);
+    final suggestedBudget = _parseDouble(s['suggestedBudget']);
+    final percentOfIncome = _parseDouble(s['percentOfIncome']);
+    final recommendation = s['recommendation']?.toString() ?? 'maintain';
 
     Color recColor;
     IconData recIcon;

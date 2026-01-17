@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import api from '../lib/api'
@@ -20,10 +20,25 @@ export default function Budgets() {
     queryFn: () => api.get(`/reports/budget-status?year=${year}&month=${month}`).then(res => res.data)
   })
 
-  const { data: categories } = useQuery({
+  const { data: categories, refetch: refetchCategories } = useQuery({
     queryKey: ['categories'],
     queryFn: () => api.get('/categories').then(res => res.data)
   })
+
+  // Tự động khởi tạo danh mục mặc định nếu chưa có
+  useEffect(() => {
+    const initCategories = async () => {
+      if (categories && categories.length < 5) {
+        try {
+          await api.post('/categories/init-defaults')
+          refetchCategories()
+        } catch (e) {
+          console.log('Categories already initialized')
+        }
+      }
+    }
+    initCategories()
+  }, [categories, refetchCategories])
 
   const createMutation = useMutation({
     mutationFn: (data) => api.post('/budgets', data),
@@ -102,8 +117,11 @@ export default function Budgets() {
                 <option value="">Chọn danh mục</option>
                 {expenseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
-              <input type="number" placeholder="Số tiền ngân sách" value={form.amount}
-                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              <input type="text" inputMode="numeric" placeholder="Số tiền ngân sách" value={form.amount}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^0-9]/g, '')
+                  setForm({ ...form, amount: value })
+                }}
                 className="w-full px-4 py-2 border rounded-lg" required />
               <div className="flex gap-4">
                 <button type="button" onClick={() => setShowModal(false)}
