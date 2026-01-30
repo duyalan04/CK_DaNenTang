@@ -41,12 +41,21 @@ exports.analyzeReceiptBase64 = async (req, res) => {
     // Loại bỏ prefix data:image/...;base64, nếu có
     const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
     
-    console.log('Processing base64 image, length:', base64Data.length);
+    console.log('📸 Processing base64 image, length:', base64Data.length);
 
     const result = await analyzeReceipt(base64Data, mimeType);
     
     // Log kết quả để debug
-    console.log('OCR Result:', JSON.stringify(result, null, 2));
+    console.log('🔍 OCR Result:', JSON.stringify(result, null, 2));
+
+    // Validate result
+    if (!result || typeof result !== 'object') {
+      console.error('❌ Invalid result from analyzeReceipt:', result);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Kết quả phân tích không hợp lệ' 
+      });
+    }
 
     // Thêm metadata
     result.processedAt = new Date().toISOString();
@@ -54,7 +63,7 @@ exports.analyzeReceiptBase64 = async (req, res) => {
     res.json(result);
 
   } catch (error) {
-    console.error('OCR Error:', error);
+    console.error('❌ OCR Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

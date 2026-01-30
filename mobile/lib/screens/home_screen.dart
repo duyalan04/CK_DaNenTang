@@ -140,6 +140,29 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                 ),
+                                const SizedBox(width: 8),
+                                GestureDetector(
+                                  onTap: () => context.push('/debug'),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.05),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Icon(
+                                      Icons.bug_report,
+                                      color: Colors.orange.shade700,
+                                      size: 22,
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),

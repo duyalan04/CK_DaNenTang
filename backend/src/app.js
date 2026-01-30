@@ -47,6 +47,16 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Debug endpoint
+app.get('/api/debug/gemini-status', (req, res) => {
+  const { getRateLimitStatus } = require('./services/gemini.service');
+  res.json({
+    status: 'ok',
+    geminiApiKey: process.env.GOOGLE_AI_API_KEY ? 'configured' : 'missing',
+    rateLimitStatus: getRateLimitStatus()
+  });
+});
+
 // Error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);

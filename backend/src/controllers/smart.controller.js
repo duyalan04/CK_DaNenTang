@@ -158,7 +158,7 @@ exports.getSmartBudgetSuggestions = async (req, res) => {
 
         const { data: transactions } = await supabase
             .from('transactions')
-            .select('*, categories(id, name)')
+            .select('*, categories(id, name, icon, color)')
             .eq('user_id', userId)
             .eq('type', 'expense')
             .gte('transaction_date', threeMonthsAgo.toISOString().split('T')[0]);
@@ -174,66 +174,169 @@ exports.getSmartBudgetSuggestions = async (req, res) => {
         const totalIncome = incomeData?.reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
         const monthlyIncome = totalIncome / 3;
 
+        if (!transactions || transactions.length < 5) {
+            return res.json({
+                success: true,
+                data: {
+                    suggestions: [],
+                    summary: {
+                        monthlyIncome: Math.round(monthlyIncome),
+                        message: 'Cần thêm dữ liệu chi tiêu để đưa ra gợi ý',
+                        essentials: 0,
+                        wants: 0,
+                        savings: 0
+                    }
+                }
+            });
+        }
+
+        // Nếu không có thu nhập, không thể tính % và đưa ra gợi ý
+        if (monthlyIncome === 0) {
+            return res.json({
+                success: true,
+                data: {
+                    suggestions: [],
+                    summary: {
+                        monthlyIncome: 0,
+                        message: 'Cần có dữ liệu thu nhập để đưa ra gợi ý ngân sách',
+                        essentials: 0,
+                        wants: 0,
+                        savings: 0
+                    }
+                }
+            });
+        }
+
         // Nhóm theo category
         const byCategory = {};
-        transactions?.forEach(t => {
+        transactions.forEach(t => {
             const catId = t.category_id;
             const catName = t.categories?.name || 'Khác';
             if (!byCategory[catId]) {
-                byCategory[catId] = { name: catName, total: 0, count: 0 };
+                byCategory[catId] = { 
+                    name: catName, 
+                    icon: t.categories?.icon || '📝',
+                    color: t.categories?.color || '#808080',
+                    total: 0, 
+                    count: 0 
+                };
             }
             byCategory[catId].total += parseFloat(t.amount);
             byCategory[catId].count++;
         });
 
-        // Tính ngân sách gợi ý theo quy tắc 50/30/20
-        const suggestions = Object.entries(byCategory).map(([catId, data]) => {
-            const monthlyAvg = data.total / 3;
-            const percentOfIncome = monthlyIncome > 0 ? (monthlyAvg / monthlyIncome) * 100 : 0;
+        // Chuẩn mực chi tiêu theo danh mục (% thu nhập)
+        const categoryBenchmarks = {
+            'Ăn uống': { max: 25, ideal: 20, type: 'essential' },
+            'Nhà cửa': { max: 30, ideal: 25, type: 'essential' },
+            'Di chuyển': { max: 15, ideal: 10, type: 'essential' },
+            'Hóa đơn': { max: 10, ideal: 8, type: 'essential' },
+            'Sức khỏe': { max: 10, ideal: 5, type: 'essential' },
+            'Giáo dục': { max: 15, ideal: 10, type: 'essential' },
+            'Mua sắm': { max: 15, ideal: 10, type: 'want' },
+            'Giải trí': { max: 10, ideal: 5, type: 'want' },
+            'Khác': { max: 10, ideal: 5, type: 'want' }
+        };
 
-            // Gợi ý dựa trên loại category
-            let suggestedBudget = monthlyAvg;
-            let recommendation = 'maintain';
+        // Tính ngân sách gợi ý thông minh
+        const suggestions = Object.entries(byCategory)
+            .map(([catId, data]) => {
+                const monthlyAvg = data.total / 3;
+                const percentOfIncome = monthlyIncome > 0 ? (monthlyAvg / monthlyIncome) * 100 : 0;
+                
+                // Lấy benchmark cho category
+                const benchmark = categoryBenchmarks[data.name] || categoryBenchmarks['Khác'];
+                
+                let suggestedBudget = monthlyAvg;
+                let recommendation = 'maintain';
+                let reason = '';
+                let priority = 3; // 1=cao, 2=trung bình, 3=thấp
 
-            if (percentOfIncome > 30) {
-                suggestedBudget = monthlyAvg * 0.85; // Giảm 15%
-                recommendation = 'reduce';
-            } else if (percentOfIncome < 5 && data.count > 5) {
-                suggestedBudget = monthlyAvg * 1.1; // Tăng 10%
-                recommendation = 'increase';
-            }
+                // Logic gợi ý thông minh
+                if (percentOfIncome > benchmark.max) {
+                    // Vượt quá mức tối đa
+                    const targetPercent = benchmark.ideal;
+                    suggestedBudget = (monthlyIncome * targetPercent) / 100;
+                    recommendation = 'reduce';
+                    priority = 1;
+                    reason = `Đang chiếm ${percentOfIncome.toFixed(1)}% thu nhập, vượt mức khuyến nghị ${benchmark.max}%. Nên giảm xuống ${targetPercent}%.`;
+                } else if (percentOfIncome > benchmark.ideal) {
+                    // Cao hơn mức lý tưởng nhưng chưa quá
+                    suggestedBudget = (monthlyIncome * benchmark.ideal) / 100;
+                    recommendation = 'reduce';
+                    priority = 2;
+                    reason = `Đang ở mức ${percentOfIncome.toFixed(1)}%, có thể giảm xuống ${benchmark.ideal}% để tối ưu hơn.`;
+                } else if (percentOfIncome < 2 && data.count < 3) {
+                    // Quá thấp, có thể cần tăng (nếu là essential)
+                    if (benchmark.type === 'essential') {
+                        suggestedBudget = (monthlyIncome * benchmark.ideal) / 100;
+                        recommendation = 'increase';
+                        priority = 2;
+                        reason = `Chi tiêu thấp (${percentOfIncome.toFixed(1)}%), có thể cần tăng lên ${benchmark.ideal}% để đảm bảo chất lượng.`;
+                    } else {
+                        recommendation = 'maintain';
+                        reason = `Chi tiêu hợp lý ở mức ${percentOfIncome.toFixed(1)}%.`;
+                    }
+                } else {
+                    // Ở mức hợp lý
+                    recommendation = 'maintain';
+                    reason = `Chi tiêu hợp lý ở mức ${percentOfIncome.toFixed(1)}%, trong khoảng khuyến nghị.`;
+                }
 
-            return {
-                categoryId: catId,
-                categoryName: data.name,
-                currentMonthlyAvg: Math.round(monthlyAvg),
-                suggestedBudget: Math.round(suggestedBudget),
-                percentOfIncome: Math.round(percentOfIncome * 10) / 10,
-                recommendation,
-                transactionCount: data.count
-            };
-        }).sort((a, b) => b.currentMonthlyAvg - a.currentMonthlyAvg);
+                const savingsAmount = monthlyAvg - suggestedBudget;
 
-        // Tổng ngân sách gợi ý
-        const totalSuggested = suggestions.reduce((s, item) => s + item.suggestedBudget, 0);
+                return {
+                    categoryId: catId,
+                    categoryName: data.name,
+                    categoryIcon: data.icon,
+                    categoryColor: data.color,
+                    currentMonthlyAvg: Math.round(monthlyAvg) || 0,
+                    suggestedBudget: Math.round(suggestedBudget) || 0,
+                    percentOfIncome: Math.round(percentOfIncome * 10) / 10 || 0,
+                    recommendation,
+                    reason,
+                    priority,
+                    transactionCount: data.count,
+                    potentialMonthlySavings: Math.round(Math.max(0, savingsAmount)) || 0,
+                    benchmarkMax: benchmark.max,
+                    benchmarkIdeal: benchmark.ideal
+                };
+            })
+            .filter(s => s.recommendation !== 'maintain' || s.percentOfIncome > 5) // Chỉ hiển thị những cái cần điều chỉnh hoặc quan trọng
+            .sort((a, b) => {
+                // Sắp xếp theo priority, sau đó theo % thu nhập
+                if (a.priority !== b.priority) return a.priority - b.priority;
+                return b.percentOfIncome - a.percentOfIncome;
+            });
+
+        // Tổng tiết kiệm tiềm năng
+        const totalPotentialSavings = suggestions.reduce((s, item) => s + (item.potentialMonthlySavings || 0), 0);
+        const totalCurrentSpending = Object.values(byCategory).reduce((s, cat) => s + (cat.total / 3 || 0), 0);
+        const totalSuggested = suggestions.reduce((s, item) => s + (item.suggestedBudget || 0), 0);
         const savingsTarget = monthlyIncome * 0.2; // 20% tiết kiệm
 
         res.json({
             success: true,
             data: {
-                suggestions,
+                suggestions: suggestions.slice(0, 8), // Top 8 gợi ý quan trọng nhất
                 summary: {
-                    monthlyIncome: Math.round(monthlyIncome),
-                    totalSuggestedBudget: Math.round(totalSuggested),
-                    suggestedSavings: Math.round(savingsTarget),
+                    monthlyIncome: Math.round(monthlyIncome) || 0,
+                    currentTotalSpending: Math.round(totalCurrentSpending) || 0,
+                    suggestedTotalSpending: Math.round(totalSuggested) || 0,
+                    potentialMonthlySavings: Math.round(totalPotentialSavings) || 0,
+                    potentialYearlySavings: Math.round(totalPotentialSavings * 12) || 0,
+                    suggestedSavings: Math.round(savingsTarget) || 0,
                     budgetRule: '50/30/20',
-                    essentials: Math.round(monthlyIncome * 0.5),
-                    wants: Math.round(monthlyIncome * 0.3),
-                    savings: Math.round(monthlyIncome * 0.2)
+                    essentials: Math.round(monthlyIncome * 0.5) || 0,
+                    wants: Math.round(monthlyIncome * 0.3) || 0,
+                    savings: Math.round(monthlyIncome * 0.2) || 0,
+                    totalCategories: Object.keys(byCategory).length,
+                    needsAdjustment: suggestions.filter(s => s.recommendation !== 'maintain').length
                 }
             }
         });
     } catch (error) {
+        console.error('Smart budget error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 };

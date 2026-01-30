@@ -58,18 +58,31 @@ class _OcrScreenState extends State<OcrScreen> {
   Future<void> _analyzeWithAI() async {
     if (_image == null) return;
 
+    setState(() {
+      _isProcessing = true;
+      _aiResult = null;
+    });
+
     try {
       final bytes = await _image!.readAsBytes();
       final base64Image = base64Encode(bytes);
 
+      print('📸 Sending image to OCR API, size: ${bytes.length} bytes');
+
       final result = await apiService.analyzeReceiptWithAI(base64Image);
+
+      print('🔍 OCR Result: ${result['success']}');
+      
+      if (result['success'] != true) {
+        throw Exception(result['error'] ?? 'OCR failed');
+      }
 
       setState(() {
         _aiResult = result;
         _isProcessing = false;
 
         // Auto-select category
-        if (result['success'] == true && result['suggestedCategory'] != null) {
+        if (result['suggestedCategory'] != null) {
           _autoSelectCategory(result['suggestedCategory']);
         }
 
@@ -77,13 +90,19 @@ class _OcrScreenState extends State<OcrScreen> {
         if (result['date'] != null) {
           try {
             _selectedDate = DateTime.parse(result['date']);
-          } catch (_) {}
+          } catch (e) {
+            print('⚠️ Failed to parse date: $e');
+          }
         }
       });
     } catch (e) {
+      print('❌ OCR Error: $e');
       setState(() {
         _isProcessing = false;
-        _aiResult = {'success': false, 'error': e.toString()};
+        _aiResult = {
+          'success': false, 
+          'error': e.toString().replaceAll('Exception: ', '')
+        };
       });
     }
   }
@@ -395,12 +414,47 @@ class _OcrScreenState extends State<OcrScreen> {
               color: Colors.red.shade50,
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Row(
+                child: Column(
                   children: [
-                    const Icon(Icons.error, color: Colors.red),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(_aiResult!['error'] ?? 'Không thể phân tích hóa đơn'),
+                    Row(
+                      children: [
+                        const Icon(Icons.error, color: Colors.red, size: 32),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Không thể phân tích hóa đơn',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _aiResult!['error'] ?? 'Lỗi không xác định',
+                                style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    const Text(
+                      '💡 Gợi ý:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '• Chụp ảnh rõ ràng, không bị mờ\n'
+                      '• Đảm bảo đủ ánh sáng\n'
+                      '• Hóa đơn phải có số tiền rõ ràng\n'
+                      '• Thử chụp lại hoặc chọn ảnh khác',
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
                     ),
                   ],
                 ),

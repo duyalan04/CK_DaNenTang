@@ -31,7 +31,11 @@ class ApiService {
         final session = Supabase.instance.client.auth.currentSession;
         if (session != null) {
           options.headers['Authorization'] = 'Bearer ${session.accessToken}';
+          print('✅ Token added: ${session.accessToken.substring(0, 20)}...');
+        } else {
+          print('❌ No session found! User not logged in?');
         }
+        print('📡 Request: ${options.method} ${options.baseUrl}${options.path}');
         return handler.next(options);
       },
       onError: (error, handler) async {
@@ -144,10 +148,18 @@ class ApiService {
   // ============ OCR ============
   Future<Map<String, dynamic>> analyzeReceiptWithAI(String base64Image) async {
     return _safeRequest(() async {
-      final response = await _dio.post('/ocr/analyze-base64', data: {
-        'image': base64Image,
-        'mimeType': 'image/jpeg'
-      });
+      // Increase timeout for OCR (Gemini can be slow)
+      final response = await _dio.post(
+        '/ocr/analyze-base64',
+        data: {
+          'image': base64Image,
+          'mimeType': 'image/jpeg'
+        },
+        options: Options(
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
+        ),
+      );
       return response.data;
     });
   }

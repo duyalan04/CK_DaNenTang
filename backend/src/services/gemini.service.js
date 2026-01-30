@@ -22,6 +22,8 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 phút
 
 const RECEIPT_PROMPT = `Bạn là chuyên gia OCR phân tích hóa đơn Việt Nam. Phân tích ảnh hóa đơn và trích xuất thông tin chính xác.
 
+QUAN TRỌNG: CHỈ TRẢ VỀ JSON HỢP LỆ, KHÔNG CÓ TEXT GIẢI THÍCH TRƯỚC HOẶC SAU JSON.
+
 ## CÁC LOẠI HÓA ĐƠN VIỆT NAM PHỔ BIẾN:
 
 1. **Cửa hàng tiện lợi**: GS25, Circle K, 7-Eleven, Ministop, FamilyMart
@@ -102,7 +104,7 @@ Hóa đơn GS25 với "Tổng tiền: 14,000" → totalAmount: 14000
 Hóa đơn nhà hàng với "Tổng thanh toán: 1.344.600đ" → totalAmount: 1344600
 Hóa đơn spa với "Thành tiền: 300,000" → totalAmount: 300000
 
-CHỈ TRẢ VỀ JSON, KHÔNG CÓ TEXT KHÁC.`;
+BẮT BUỘC: Response phải bắt đầu bằng { và kết thúc bằng }. Không thêm text giải thích.`;
 
 // ============ HELPER FUNCTIONS ============
 
@@ -270,13 +272,19 @@ async function analyzeReceipt(imageBase64, mimeType = 'image/jpeg') {
     // 3. Parse JSON từ response - với xử lý lỗi tốt hơn
     let parsed;
     try {
+      let jsonStr = response.trim();
+      
+      // Remove markdown code blocks nếu có
+      jsonStr = jsonStr.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/,'');
+      
       // Tìm JSON object trong response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        return { success: false, error: 'Không thể tìm thấy JSON trong response' };
+        console.error('No JSON found in response:', response.substring(0, 500));
+        return { success: false, error: 'Không thể tìm thấy JSON trong response', rawResponse: response.substring(0, 500) };
       }
       
-      let jsonStr = jsonMatch[0];
+      jsonStr = jsonMatch[0];
       
       // Clean up common JSON issues từ AI
       // 1. Remove trailing commas before } or ]
@@ -300,9 +308,11 @@ async function analyzeReceipt(imageBase64, mimeType = 'image/jpeg') {
       });
       
       parsed = JSON.parse(jsonStr);
+      console.log('✅ Successfully parsed JSON');
       
     } catch (parseError) {
-      console.error('JSON Parse Error:', parseError.message);
+      console.error('❌ JSON Parse Error:', parseError.message);
+      console.error('Raw response sample:', response.substring(0, 500));
       console.error('Attempting fallback parsing...');
       
       // Fallback: Trích xuất thông tin cơ bản bằng regex

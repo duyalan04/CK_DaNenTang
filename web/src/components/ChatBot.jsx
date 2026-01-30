@@ -27,23 +27,19 @@ export default function ChatBot() {
 
     // Refresh dashboard data - force refetch immediately
     const refreshDashboard = async () => {
-        console.log('Refreshing dashboard data...')
-        // Reset cache và fetch lại
-        await queryClient.resetQueries({ queryKey: ['summary'] })
-        await queryClient.resetQueries({ queryKey: ['byCategory'] })
-        await queryClient.resetQueries({ queryKey: ['healthScore'] })
-        await queryClient.resetQueries({ queryKey: ['anomalies'] })
+        console.log('🔄 Refreshing dashboard data...')
         
-        // Refetch active queries
-        queryClient.refetchQueries({ queryKey: ['summary'], type: 'active' })
-        queryClient.refetchQueries({ queryKey: ['byCategory'], type: 'active' })
-        queryClient.refetchQueries({ queryKey: ['healthScore'], type: 'active' })
-        queryClient.refetchQueries({ queryKey: ['anomalies'], type: 'active' })
-        queryClient.refetchQueries({ queryKey: ['trend'], type: 'active' })
-        queryClient.refetchQueries({ queryKey: ['insights'], type: 'active' })
-        queryClient.refetchQueries({ queryKey: ['savings'], type: 'active' })
-        queryClient.refetchQueries({ queryKey: ['smartBudget'], type: 'active' })
-        console.log('Dashboard refresh triggered!')
+        // Invalidate tất cả queries liên quan
+        await queryClient.invalidateQueries({ queryKey: ['summary'] })
+        await queryClient.invalidateQueries({ queryKey: ['byCategory'] })
+        await queryClient.invalidateQueries({ queryKey: ['healthScore'] })
+        await queryClient.invalidateQueries({ queryKey: ['anomalies'] })
+        await queryClient.invalidateQueries({ queryKey: ['trend'] })
+        await queryClient.invalidateQueries({ queryKey: ['insights'] })
+        await queryClient.invalidateQueries({ queryKey: ['savings'] })
+        await queryClient.invalidateQueries({ queryKey: ['smartBudget'] })
+        
+        console.log('✅ Dashboard refreshed!')
     }
 
     const handleSend = async () => {
@@ -70,13 +66,22 @@ export default function ChatBot() {
                 setConversationId(response.data.data.conversationId)
                 
                 // Nếu AI tạo giao dịch, refresh dashboard
-                console.log('Chat response:', response.data.data)
+                console.log('📊 Chat response:', response.data.data)
                 if (response.data.data.transactionCreated) {
-                    console.log('Transaction created!', response.data.data.transactionCreated)
-                    // Delay để DB cập nhật xong
+                    console.log('✅ Transaction created!', response.data.data.transactionCreated)
+                    
+                    // Thêm message thông báo đang cập nhật
+                    setMessages(prev => [...prev, {
+                        role: 'assistant',
+                        content: '🔄 Đang cập nhật số dư...'
+                    }])
+                    
+                    // Delay để DB cập nhật xong, sau đó refresh
                     setTimeout(async () => {
                         await refreshDashboard()
-                    }, 800)
+                        // Xóa message loading
+                        setMessages(prev => prev.filter(m => m.content !== '🔄 Đang cập nhật số dư...'))
+                    }, 1000) // Tăng delay lên 1s
                 }
             } else {
                 throw new Error(response.data.error)

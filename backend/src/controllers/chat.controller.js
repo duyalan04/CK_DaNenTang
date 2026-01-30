@@ -73,6 +73,22 @@ CÁCH NÓI CHUYỆN:
 - Có thể dùng: "nha", "nhé", "á", "đó", "hen"
 - Ví dụ: "Oke ghi rồi nha!", "Xịn đấy!", "Chill thôi, từ từ tính"
 
+⚠️ QUY TẮC QUAN TRỌNG VỀ SỐ DƯ:
+- LUÔN LUÔN sử dụng số liệu từ "DỮ LIỆU TÀI CHÍNH CỦA NGƯỜI DÙNG" được cung cấp trong context
+- KHÔNG TỰ Ý tính toán hoặc cộng dồn số dư từ lịch sử chat
+- Khi user hỏi "số dư hiện tại", "còn lại bao nhiêu", "balance" → trả lời CHÍNH XÁC số "Còn lại" trong dữ liệu context
+- TUYỆT ĐỐI KHÔNG nhớ hoặc tham khảo số dư từ tin nhắn trước đó
+- Nếu không có dữ liệu context, nói rõ "Mình chưa có dữ liệu, cậu cho mình biết thu nhập và chi tiêu nhé"
+
+VÍ DỤ ĐÚNG:
+User: "số dư hiện tại?"
+Context: "Còn lại: 4.805.000đ"
+Bot: "Số dư hiện tại của cậu là 4.805.000đ."
+
+VÍ DỤ SAI (TUYỆT ĐỐI TRÁNH):
+User: "số dư hiện tại?"
+Bot: "Cậu vừa nhận 1tr, trước đó có 5tr, nên bây giờ là 6tr" ❌ SAI - KHÔNG TỰ TÍNH
+
 ${FINANCE_KNOWLEDGE}
 
 KHẢ NĂNG:
@@ -225,7 +241,7 @@ function parseUserMessage(message) {
   
   // Xác định loại giao dịch
   let type = 'expense';
-  if (/lương|thu nhập|nhận|thưởng|bonus|salary|income|tiền về|chuyển khoản đến|nhận được/.test(text)) {
+  if (/lương|thu nhập|nhận|thưởng|bonus|salary|income|tiền về|chuyển khoản đến|nhận được|có \d|được \d|kiếm được|thu về/.test(text)) {
     type = 'income';
   }
   
@@ -313,24 +329,40 @@ exports.sendMessage = async (req, res) => {
     // Lấy dữ liệu tài chính của user
     const financialContext = await getUserFinancialContext(userId);
     
+    // 🔍 DEBUG LOG
+    if (financialContext) {
+      console.log('💰 Financial Context:', {
+        income: financialContext.thisMonth.income,
+        expense: financialContext.thisMonth.expense,
+        balance: financialContext.thisMonth.balance
+      });
+    }
+    
     // Tạo context message nếu có dữ liệu
     let userContextPrompt = '';
     if (financialContext && financialContext.transactionCount > 0) {
       userContextPrompt = `
-DỮ LIỆU TÀI CHÍNH CỦA NGƯỜI DÙNG (tháng này):
+DỮ LIỆU TÀI CHÍNH CỦA NGƯỜI DÙNG (tháng này - CẬP NHẬT MỚI NHẤT):
 - Thu nhập: ${formatVND(financialContext.thisMonth.income)}
 - Chi tiêu: ${formatVND(financialContext.thisMonth.expense)}
 - Còn lại: ${formatVND(financialContext.thisMonth.balance)}
 - Chi tiêu TB/tháng (3 tháng): ${formatVND(financialContext.avgMonthlyExpense)}
 - Top chi tiêu: ${financialContext.topCategories.join(', ') || 'Chưa có'}
 
-Hãy sử dụng dữ liệu này để đưa ra lời khuyên cá nhân hóa.
+⚠️ QUAN TRỌNG: Đây là dữ liệu THỰC TẾ từ database. Khi user hỏi về số dư, thu nhập, chi tiêu - HÃY DÙNG CHÍNH XÁC các con số này, KHÔNG tự tính toán từ lịch sử chat.
 `;
     }
 
     // Lấy hoặc tạo conversation history
     const historyKey = conversationId || `${userId || 'anon'}-${Date.now()}`;
     let history = conversationHistory.get(historyKey) || [];
+
+    // ✨ KIỂM TRA: Nếu user hỏi về số dư/tài chính, XÓA HISTORY để tránh AI nhầm lẫn
+    const isFinancialQuery = /số dư|còn lại|balance|bao nhiêu|hiện tại|tổng|thu nhập|chi tiêu/i.test(message);
+    if (isFinancialQuery && financialContext) {
+      console.log('🔄 Financial query detected - clearing history to prevent AI confusion');
+      history = []; // Xóa history để AI chỉ dựa vào dữ liệu thực
+    }
 
     // Thêm tin nhắn user vào history
     history.push({
@@ -359,6 +391,26 @@ Hãy sử dụng dữ liệu này để đưa ra lời khuyên cá nhân hóa.
     });
 
     let aiResponse = completion.choices[0]?.message?.content || 'Xin lỗi, tôi không thể trả lời lúc này.';
+
+    // ✨ KIỂM TRA VÀ SỬA LỖI: Nếu user hỏi về số dư, đảm bảo AI trả lời đúng
+    if (isFinancialQuery && financialContext) {
+      const correctBalance = formatVND(financialContext.thisMonth.balance);
+      const correctIncome = formatVND(financialContext.thisMonth.income);
+      const correctExpense = formatVND(financialContext.thisMonth.expense);
+      
+      // Nếu AI đề cập số dư nhưng không chính xác, sửa lại
+      const balancePattern = /số dư.*?(\d[\d.,\s]*(?:triệu|tr|nghìn|k|đ))/i;
+      const match = aiResponse.match(balancePattern);
+      
+      if (match && !aiResponse.includes(correctBalance)) {
+        console.log('⚠️ AI response contains incorrect balance, correcting...');
+        // Thay thế bằng số dư chính xác
+        aiResponse = `Số dư hiện tại của cậu là ${correctBalance} (thu nhập ${correctIncome}, chi tiêu ${correctExpense}).`;
+      } else if (/số dư|còn lại|balance/i.test(message) && !match) {
+        // User hỏi số dư nhưng AI không trả lời rõ ràng
+        aiResponse = `Số dư hiện tại của cậu là ${correctBalance}.`;
+      }
+    }
 
     // Kiểm tra và xử lý lệnh tạo giao dịch
     let transactionCreated = null;
@@ -453,6 +505,27 @@ Hãy sử dụng dữ liệu này để đưa ra lời khuyên cá nhân hóa.
                 description: transactionData.description
               };
               console.log('✅ Transaction created:', transactionCreated);
+              
+              // ✨ CẬP NHẬT: Fetch lại dữ liệu tài chính sau khi tạo giao dịch
+              const updatedContext = await getUserFinancialContext(userId);
+              if (updatedContext) {
+                // Thêm thông tin số dư mới vào response
+                const newBalance = updatedContext.thisMonth.balance;
+                const oldBalance = financialContext?.thisMonth?.balance || 0;
+                
+                // Nếu AI chưa đề cập đến số dư mới, thêm vào
+                if (!aiResponse.includes(formatVND(newBalance))) {
+                  if (txType === 'income') {
+                    aiResponse += `\n\nSố dư mới của cậu là ${formatVND(newBalance)}.`;
+                  } else {
+                    aiResponse += `\n\nSố dư còn lại: ${formatVND(newBalance)}.`;
+                  }
+                }
+                
+                // ✨ XÓA HISTORY để tránh AI nhầm lẫn số dư cũ
+                // Chỉ giữ lại 2 tin nhắn cuối (user message + bot response hiện tại)
+                history = history.slice(-1); // Giữ user message cuối
+              }
             } else {
               console.error('❌ Failed to create transaction:', error);
             }

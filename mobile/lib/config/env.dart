@@ -50,7 +50,7 @@ class Env {
     
     // Thêm các IP phổ biến cho emulator
     if (Platform.isAndroid) {
-      ipsToScan.add('10.0.2.2'); // Android Emulator
+      ipsToScan.add('192.168.207.19'); // Android Emulator
     }
     
     // Scan subnet của thiết bị
