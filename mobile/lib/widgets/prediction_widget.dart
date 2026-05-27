@@ -21,21 +21,25 @@ class _PredictionWidgetState extends State<PredictionWidget> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _hasError = false;
     });
     try {
       final result = await apiService.getPrediction();
+      if (!mounted) return;
       setState(() {
         _data = result;
         _isLoading = false;
       });
     } catch (e) {
-      setState(() {
-        _hasError = true;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
+      }
     }
   }
 

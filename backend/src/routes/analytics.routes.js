@@ -34,4 +34,11 @@ router.get('/insights', analyticsController.generateInsights);
  */
 router.get('/savings', analyticsController.calculateSavings);
 
+/**
+ * @route   PUT /api/analytics/anomalies/:transactionId/dismiss
+ * @desc    Bỏ qua (dismiss) một cảnh báo bất thường
+ * @access  Private
+ */
+router.put('/anomalies/:transactionId/dismiss', analyticsController.dismissAnomaly);
+
 module.exports = router;

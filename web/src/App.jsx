@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import Transactions from './pages/Transactions'
 import Budgets from './pages/Budgets'
 import Reports from './pages/Reports'
+import Profile from './pages/Profile'
 import Login from './pages/Login'
 
 function App() {
@@ -44,6 +45,7 @@ function App() {
         <Route path="/transactions" element={<Transactions />} />
         <Route path="/budgets" element={<Budgets />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/profile" element={<Profile />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Layout>

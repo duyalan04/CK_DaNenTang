@@ -77,6 +77,20 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     return NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0).format(value);
   }
 
+  String _formatDate(String? value) {
+    if (value == null || value.isEmpty) return 'Không rõ';
+    final date = DateTime.tryParse(value);
+    if (date == null) return value;
+    return DateFormat('dd/MM/yyyy').format(date);
+  }
+
+  String _formatDateTime(String? value) {
+    if (value == null || value.isEmpty) return 'Không rõ';
+    final date = DateTime.tryParse(value);
+    if (date == null) return value;
+    return DateFormat('dd/MM/yyyy · HH:mm').format(date.toLocal());
+  }
+
   Future<void> _selectDateRange() async {
     final picked = await showDateRangePicker(
       context: context,
@@ -297,6 +311,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               ...transactions.map((t) => _TransactionCard(
                 transaction: t,
                 formatCurrency: _formatCurrency,
+                formatDate: _formatDate,
                 onRefresh: _loadData,
               )),
             ],
@@ -310,11 +325,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 class _TransactionCard extends StatelessWidget {
   final dynamic transaction;
   final String Function(num) formatCurrency;
+  final String Function(String?) formatDate;
   final VoidCallback onRefresh;
 
   const _TransactionCard({
     required this.transaction,
     required this.formatCurrency,
+    required this.formatDate,
     required this.onRefresh,
   });
 
@@ -327,12 +344,21 @@ class _TransactionCard extends StatelessWidget {
     final color = Color(int.parse(colorHex.replaceFirst('#', '0xFF')));
     final amount = (t['amount'] ?? 0) as num;
     final description = t['description']?.toString() ?? '';
+    final ocrData = t['ocr_data'] as Map<String, dynamic>?;
+    final hasReceipt = ocrData != null;
+
+    // Lấy giờ từ created_at (TIMESTAMPTZ)
+    final createdAt = DateTime.tryParse(t['created_at']?.toString() ?? '');
+    final timeStr = createdAt != null
+        ? DateFormat('HH:mm').format(createdAt.toLocal())
+        : null;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
+        onTap: () => _showTransactionDetails(context, t),
         leading: CircleAvatar(
-          backgroundColor: color.withOpacity(0.2),
+          backgroundColor: color.withValues(alpha: 0.2),
           child: Text(
             category?['icon']?.toString() ?? (isExpense ? '💸' : '💰'),
             style: const TextStyle(fontSize: 20),
@@ -343,7 +369,21 @@ class _TransactionCard extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w500),
         ),
         subtitle: description.isNotEmpty
-            ? Text(description, maxLines: 1, overflow: TextOverflow.ellipsis)
+            ? Row(
+                children: [
+                  if (hasReceipt) ...[
+                    Icon(Icons.receipt_long, size: 14, color: Colors.teal.shade700),
+                    const SizedBox(width: 4),
+                  ],
+                  Expanded(
+                    child: Text(
+                      description,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              )
             : null,
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -357,8 +397,429 @@ class _TransactionCard extends StatelessWidget {
                 fontSize: 15,
               ),
             ),
+            if (timeStr != null)
+              Text(
+                timeStr,
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+              ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showTransactionDetails(BuildContext context, Map<String, dynamic> transaction) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _TransactionDetailSheet(
+        transaction: transaction,
+        formatCurrency: formatCurrency,
+        formatDate: formatDate,
+      ),
+    );
+  }
+}
+
+class _TransactionDetailSheet extends StatelessWidget {
+  final Map<String, dynamic> transaction;
+  final String Function(num) formatCurrency;
+  final String Function(String?) formatDate;
+
+  const _TransactionDetailSheet({
+    required this.transaction,
+    required this.formatCurrency,
+    required this.formatDate,
+  });
+
+  Map<String, dynamic> get _ocrData {
+    final data = transaction['ocr_data'];
+    return data is Map<String, dynamic> ? data : {};
+  }
+
+  Map<String, dynamic> get _aiAnalysis {
+    final data = _ocrData['aiAnalysis'];
+    return data is Map<String, dynamic> ? data : {};
+  }
+
+  List<dynamic> get _receiptItems {
+    final receiptItems = _ocrData['receiptItems'];
+    final aiItems = _aiAnalysis['items'];
+    final extractedItems = _ocrData['extractedItems'];
+
+    if (receiptItems is List && receiptItems.isNotEmpty) return receiptItems;
+    if (aiItems is List && aiItems.isNotEmpty) return aiItems;
+    if (extractedItems is List) {
+      return extractedItems.map((name) => {'name': name, 'quantity': 1}).toList();
+    }
+    return [];
+  }
+
+  String? _stringValue(List<String> keys) {
+    for (final key in keys) {
+      final value = _ocrData[key] ?? _aiAnalysis[key] ?? transaction[key];
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return value.toString();
+      }
+    }
+    return null;
+  }
+
+  num _numValue(dynamic value) {
+    if (value is num) return value;
+    if (value is String) {
+      final cleaned = value.replaceAll(RegExp(r'[^0-9.-]'), '');
+      return num.tryParse(cleaned) ?? 0;
+    }
+    return 0;
+  }
+
+  String _formatDateWithTime(String? dateStr, String? createdAtStr) {
+    final date = DateTime.tryParse(dateStr ?? '');
+    final createdAt = DateTime.tryParse(createdAtStr ?? '');
+    final formattedDate = date != null
+        ? DateFormat('dd/MM/yyyy').format(date)
+        : (dateStr ?? 'Không rõ');
+    if (createdAt != null) {
+      final timeStr = DateFormat('HH:mm').format(createdAt.toLocal());
+      return '$formattedDate · $timeStr';
+    }
+    return formattedDate;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final category = transaction['categories'] as Map<String, dynamic>?;
+    final isExpense = transaction['type'] == 'expense';
+    final amount = _numValue(transaction['amount']);
+    final items = _receiptItems;
+    final storeName = _stringValue(['storeName', 'rawText']) ?? 'Giao dịch';
+    final invoiceNumber = _stringValue(['invoiceNumber']);
+    final receiptDate = _stringValue(['receiptDate', 'date', 'transaction_date']);
+    final receiptTime = _stringValue(['receiptTime', 'time']);
+    final totalAmount = _numValue(_ocrData['totalAmount'] ?? _aiAnalysis['totalAmount'] ?? amount);
+    final hasReceipt = _ocrData.isNotEmpty;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.82,
+      minChildSize: 0.45,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: hasReceipt ? Colors.teal.shade50 : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Icon(
+                      hasReceipt ? Icons.receipt_long : Icons.payments_outlined,
+                      color: hasReceipt ? Colors.teal.shade700 : Colors.grey.shade700,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          hasReceipt ? storeName : (category?['name'] ?? 'Giao dịch'),
+                          style: const TextStyle(
+                            fontSize: 21,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          hasReceipt
+                              ? 'Chi tiết hóa đơn đã quét'
+                              : (transaction['description']?.toString() ?? ''),
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isExpense ? Colors.red.shade50 : Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _DetailMetric(
+                        label: 'Số tiền',
+                        value: '${isExpense ? '-' : '+'}${formatCurrency(amount)}',
+                        color: isExpense ? Colors.red.shade700 : Colors.green.shade700,
+                      ),
+                    ),
+                    Expanded(
+                      child: _DetailMetric(
+                        label: 'Danh mục',
+                        value: category?['name']?.toString() ?? 'Không xác định',
+                        alignEnd: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              _InfoPanel(
+                rows: [
+                  _InfoRowData('Ngày giao dịch', _formatDateWithTime(
+                    transaction['transaction_date']?.toString(),
+                    transaction['created_at']?.toString(),
+                  )),
+                  if (hasReceipt) _InfoRowData('Ngày trên hóa đơn', '${formatDate(receiptDate)}${receiptTime != null ? ' $receiptTime' : ''}'),
+                  if (invoiceNumber != null) _InfoRowData('Mã hóa đơn', invoiceNumber),
+                  if (hasReceipt) _InfoRowData('Tổng hóa đơn', formatCurrency(totalAmount)),
+                  if ((transaction['description']?.toString() ?? '').isNotEmpty)
+                    _InfoRowData('Mô tả', transaction['description'].toString()),
+                ],
+              ),
+              const SizedBox(height: 18),
+              if (hasReceipt) ...[
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Sản phẩm trong hóa đơn',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    Text(
+                      '${items.length} mục',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                if (items.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Text(
+                      'Giao dịch này có dữ liệu OCR nhưng chưa lưu danh sách sản phẩm chi tiết.',
+                      style: TextStyle(color: Colors.grey.shade700),
+                    ),
+                  )
+                else
+                  ...items.map((item) => _ReceiptItemTile(
+                        item: item,
+                        formatCurrency: formatCurrency,
+                      )),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DetailMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? color;
+  final bool alignEnd;
+
+  const _DetailMetric({
+    required this.label,
+    required this.value,
+    this.color,
+    this.alignEnd = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          textAlign: alignEnd ? TextAlign.right : TextAlign.left,
+          style: TextStyle(
+            color: color ?? Colors.grey.shade900,
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InfoRowData {
+  final String label;
+  final String value;
+
+  const _InfoRowData(this.label, this.value);
+}
+
+class _InfoPanel extends StatelessWidget {
+  final List<_InfoRowData> rows;
+
+  const _InfoPanel({required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade100),
+      ),
+      child: Column(
+        children: rows.map((row) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 116,
+                  child: Text(
+                    row.label,
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    row.value,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+class _ReceiptItemTile extends StatelessWidget {
+  final dynamic item;
+  final String Function(num) formatCurrency;
+
+  const _ReceiptItemTile({
+    required this.item,
+    required this.formatCurrency,
+  });
+
+  num _numValue(dynamic value) {
+    if (value is num) return value;
+    if (value is String) {
+      final cleaned = value.replaceAll(RegExp(r'[^0-9.-]'), '');
+      return num.tryParse(cleaned) ?? 0;
+    }
+    return 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final data = item is Map<String, dynamic> ? item as Map<String, dynamic> : {'name': item.toString()};
+    final name = data['name']?.toString() ?? 'Sản phẩm';
+    final quantity = _numValue(data['quantity'] ?? 1);
+    final total = _numValue(data['total'] ?? data['unitPrice']);
+    final unitPrice = _numValue(data['unitPrice']);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.grey.shade100),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.025),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: Colors.teal.shade50,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.shopping_bag_outlined, color: Colors.teal.shade700, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  unitPrice > 0
+                      ? 'SL: ${quantity.toStringAsFixed(quantity % 1 == 0 ? 0 : 1)} x ${formatCurrency(unitPrice)}'
+                      : 'SL: ${quantity.toStringAsFixed(quantity % 1 == 0 ? 0 : 1)}',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            total > 0 ? formatCurrency(total) : '',
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+        ],
       ),
     );
   }

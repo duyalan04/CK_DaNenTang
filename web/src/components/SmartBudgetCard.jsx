@@ -1,181 +1,213 @@
 import { useQuery } from '@tanstack/react-query'
-import { Wallet, TrendingDown, TrendingUp, Check, RefreshCw } from 'lucide-react'
+import { TrendingDown, TrendingUp, Check, RefreshCw, ChevronDown, ChevronUp, Wallet, PiggyBank, ShoppingCart, Sparkles } from 'lucide-react'
+import { useState } from 'react'
 import api from '../lib/api'
 
 const formatCurrency = (value) => {
-    // Xử lý NaN, null, undefined
     const numValue = Number(value)
-    if (!isFinite(numValue) || isNaN(numValue)) {
-        return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(0)
-    }
+    if (!isFinite(numValue) || isNaN(numValue)) return '0 ₫'
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(numValue)
 }
 
-// 50/30/20 Rule visualization
-const BudgetRuleBar = ({ essentials, wants, savings }) => {
+const formatShort = (value) => {
+    const num = Number(value)
+    if (!isFinite(num) || isNaN(num)) return '0'
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}tr`
+    if (num >= 1000) return `${Math.round(num / 1000)}k`
+    return num.toLocaleString('vi-VN')
+}
+
+// ── Donut chart cho 50/30/20 ──
+const DonutChart = ({ essentials, wants, savings, income }) => {
+    const total = income || 1
+    const pEssentials = Math.round((essentials / total) * 100)
+    const pWants = Math.round((wants / total) * 100)
+    const pSavings = 100 - pEssentials - pWants
+
+    const radius = 40
+    const circumference = 2 * Math.PI * radius
+
+    const s1 = (pEssentials / 100) * circumference
+    const s2 = (pWants / 100) * circumference
+    const s3 = (pSavings / 100) * circumference
+
+    const gap = 2
+    const offset1 = 0
+    const offset2 = s1 + gap
+    const offset3 = s1 + s2 + gap * 2
+
     return (
-        <div className="mb-4">
-            <div className="flex h-3 rounded-full overflow-hidden">
-                <div 
-                    className="bg-blue-500" 
-                    style={{ width: '50%' }}
-                    title={`Thiết yếu: ${formatCurrency(essentials)}`}
+        <div className="relative w-32 h-32 flex-shrink-0">
+            <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                {/* Essentials */}
+                <circle cx="50" cy="50" r={radius}
+                    fill="none" stroke="#3b82f6" strokeWidth="10"
+                    strokeDasharray={`${s1 - gap} ${circumference - s1 + gap}`}
+                    strokeDashoffset={-offset1}
+                    strokeLinecap="round" className="transition-all duration-700"
                 />
-                <div 
-                    className="bg-orange-500" 
-                    style={{ width: '30%' }}
-                    title={`Mong muốn: ${formatCurrency(wants)}`}
+                {/* Wants */}
+                <circle cx="50" cy="50" r={radius}
+                    fill="none" stroke="#f97316" strokeWidth="10"
+                    strokeDasharray={`${s2 - gap} ${circumference - s2 + gap}`}
+                    strokeDashoffset={-offset2}
+                    strokeLinecap="round" className="transition-all duration-700"
                 />
-                <div 
-                    className="bg-green-500" 
-                    style={{ width: '20%' }}
-                    title={`Tiết kiệm: ${formatCurrency(savings)}`}
+                {/* Savings */}
+                <circle cx="50" cy="50" r={radius}
+                    fill="none" stroke="#22c55e" strokeWidth="10"
+                    strokeDasharray={`${s3 - gap} ${circumference - s3 + gap}`}
+                    strokeDashoffset={-offset3}
+                    strokeLinecap="round" className="transition-all duration-700"
                 />
-            </div>
-            <div className="flex justify-between mt-2 text-xs">
-                <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    <span className="text-gray-600">50% Thiết yếu</span>
-                </div>
-                <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                    <span className="text-gray-600">30% Mong muốn</span>
-                </div>
-                <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-gray-600">20% Tiết kiệm</span>
-                </div>
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-xs text-gray-400 leading-none">Thu nhập</span>
+                <span className="text-base font-bold text-gray-800 leading-tight">{formatShort(income)}</span>
             </div>
         </div>
     )
 }
 
-// Single suggestion item
-const SuggestionItem = ({ suggestion }) => {
-    const { 
-        categoryName, 
-        categoryIcon,
-        categoryColor,
-        currentMonthlyAvg, 
-        suggestedBudget, 
-        percentOfIncome, 
-        recommendation,
-        reason,
-        priority,
-        potentialMonthlySavings,
-        benchmarkIdeal
-    } = suggestion
-    
-    const getRecommendationStyle = () => {
-        switch (recommendation) {
-            case 'reduce':
-                return { 
-                    icon: TrendingDown, 
-                    color: 'text-red-600', 
-                    bg: 'bg-red-50',
-                    border: 'border-red-200',
-                    text: 'Nên giảm'
-                }
-            case 'increase':
-                return { 
-                    icon: TrendingUp, 
-                    color: 'text-blue-600', 
-                    bg: 'bg-blue-50',
-                    border: 'border-blue-200',
-                    text: 'Có thể tăng'
-                }
-            default:
-                return { 
-                    icon: Check, 
-                    color: 'text-green-600', 
-                    bg: 'bg-green-50',
-                    border: 'border-green-200',
-                    text: 'Hợp lý'
-                }
-        }
-    }
-    
-    const style = getRecommendationStyle()
-    const Icon = style.icon
-
-    const getPriorityBadge = () => {
-        if (priority === 1) return { text: 'Ưu tiên cao', color: 'bg-red-100 text-red-700' }
-        if (priority === 2) return { text: 'Quan trọng', color: 'bg-orange-100 text-orange-700' }
-        return { text: 'Gợi ý', color: 'bg-blue-100 text-blue-700' }
-    }
-
-    const priorityBadge = getPriorityBadge()
+// ── Visual bar comparison ──
+const ComparisonBar = ({ current, suggested, income }) => {
+    const max = income || 1
+    const currentPct = Math.min((current / max) * 100, 100)
+    const suggestedPct = Math.min((suggested / max) * 100, 100)
+    const isReduce = suggested < current
 
     return (
-        <div className={`p-4 bg-white rounded-lg border-2 ${style.border} hover:shadow-md transition-all`}>
-            <div className="flex items-start gap-3">
-                {/* Category Icon */}
+        <div className="space-y-2 flex-1">
+            <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 w-16 text-right">Đang chi</span>
+                <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                        className="h-full rounded-full bg-gray-400 transition-all duration-500"
+                        style={{ width: `${currentPct}%` }}
+                    />
+                </div>
+                <span className="text-xs font-semibold text-gray-600 w-20 text-right">{formatShort(current)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 w-16 text-right">Nên chi</span>
+                <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                        className={`h-full rounded-full transition-all duration-500 ${isReduce ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                        style={{ width: `${suggestedPct}%` }}
+                    />
+                </div>
+                <span className={`text-xs font-semibold w-20 text-right ${isReduce ? 'text-emerald-600' : 'text-blue-600'}`}>
+                    {formatShort(suggested)}
+                </span>
+            </div>
+        </div>
+    )
+}
+
+// ── Suggestion Item – gọn, dễ hiểu ──
+const SuggestionItem = ({ suggestion, income }) => {
+    const [isOpen, setIsOpen] = useState(false)
+    const {
+        categoryName, categoryIcon, categoryColor,
+        currentMonthlyAvg, suggestedBudget,
+        percentOfIncome, recommendation, reason,
+        priority, potentialMonthlySavings, benchmarkIdeal
+    } = suggestion
+
+    const isReduce = recommendation === 'reduce'
+    const isIncrease = recommendation === 'increase'
+
+    const config = isReduce
+        ? { icon: TrendingDown, color: 'text-red-500', bg: 'bg-red-50', ringColor: 'ring-red-200', label: 'Giảm bớt' }
+        : isIncrease
+            ? { icon: TrendingUp, color: 'text-blue-500', bg: 'bg-blue-50', ringColor: 'ring-blue-200', label: 'Tăng thêm' }
+            : { icon: Check, color: 'text-emerald-500', bg: 'bg-emerald-50', ringColor: 'ring-emerald-200', label: 'Hợp lý' }
+
+    const Icon = config.icon
+    const savingsAmount = (potentialMonthlySavings || 0)
+
+    return (
+        <div
+            className={`rounded-xl border transition-all duration-200 ${isOpen ? 'ring-1 ' + config.ringColor + ' shadow-sm' : 'hover:shadow-sm'} ${isReduce ? 'border-red-100' : isIncrease ? 'border-blue-100' : 'border-gray-100'}`}
+        >
+            {/* Header row — always visible */}
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full flex items-center gap-3 p-3.5 text-left"
+            >
+                {/* Category icon */}
                 <div
-                    className="w-12 h-12 rounded-full flex items-center justify-center text-xl flex-shrink-0"
-                    style={{ backgroundColor: categoryColor + '30' || '#e5e7eb' }}
+                    className="w-11 h-11 rounded-lg flex items-center justify-center text-xl flex-shrink-0"
+                    style={{ backgroundColor: (categoryColor || '#9CA3AF') + '20' }}
                 >
                     {categoryIcon || '📝'}
                 </div>
 
-                {/* Content */}
+                {/* Name + percent */}
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between mb-2">
-                        <h4 className="font-semibold text-gray-800">{categoryName}</h4>
-                        <span className={`text-xs px-2 py-1 rounded-full ${priorityBadge.color} whitespace-nowrap`}>
-                            {priorityBadge.text}
-                        </span>
+                    <div className="flex items-center gap-2">
+                        <span className="font-semibold text-base text-gray-800 truncate">{categoryName}</span>
+                        {priority === 1 && (
+                            <span className="flex-shrink-0 w-2 h-2 rounded-full bg-red-500 animate-pulse" title="Ưu tiên cao" />
+                        )}
                     </div>
+                    <span className="text-sm text-gray-400">
+                        {(percentOfIncome || 0).toFixed(1)}% thu nhập · {formatCurrency(currentMonthlyAvg || 0)}/tháng
+                    </span>
+                </div>
 
-                    {/* Current vs Suggested */}
-                    <div className="flex items-center gap-2 mb-2">
-                        <div className="flex-1">
-                            <div className="text-xs text-gray-500 mb-1">Hiện tại</div>
-                            <div className="font-semibold text-gray-700">
-                                {formatCurrency(currentMonthlyAvg || 0)}
-                            </div>
-                            <div className="text-xs text-gray-400">{percentOfIncome || 0}% thu nhập</div>
-                        </div>
-                        <div className="text-gray-300">→</div>
-                        <div className="flex-1">
-                            <div className="text-xs text-gray-500 mb-1">Gợi ý</div>
-                            <div className={`font-semibold ${style.color}`}>
-                                {formatCurrency(suggestedBudget || 0)}
-                            </div>
-                            <div className="text-xs text-gray-400">~{benchmarkIdeal || 0}% lý tưởng</div>
-                        </div>
+                {/* Action tag */}
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${config.bg} ${config.color}`}>
+                    <Icon className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">{config.label}</span>
+                </div>
+
+                {/* Expand arrow */}
+                {isOpen
+                    ? <ChevronUp className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                    : <ChevronDown className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                }
+            </button>
+
+            {/* Expanded details */}
+            {isOpen && (
+                <div className="px-3 pb-3 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                    {/* Visual comparison */}
+                    <div className="flex items-center gap-3">
+                        <ComparisonBar
+                            current={currentMonthlyAvg || 0}
+                            suggested={suggestedBudget || 0}
+                            income={income}
+                        />
                     </div>
 
                     {/* Reason */}
-                    <div className={`p-2 rounded-md ${style.bg} mb-2`}>
-                        <p className="text-xs text-gray-600">{reason || 'Đang phân tích...'}</p>
-                    </div>
+                    {reason && (
+                        <p className="text-sm text-gray-500 leading-relaxed pl-1">
+                            💡 {reason}
+                        </p>
+                    )}
 
-                    {/* Savings Potential */}
-                    {(potentialMonthlySavings || 0) > 0 && (
-                        <div className="flex items-center justify-between p-2 bg-green-50 rounded-md">
-                            <span className="text-xs text-gray-600">Tiết kiệm được:</span>
+                    {/* Savings highlight */}
+                    {savingsAmount > 0 && (
+                        <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg">
+                            <div className="flex items-center gap-2">
+                                <PiggyBank className="w-4 h-4 text-emerald-500" />
+                                <span className="text-sm text-gray-600">Có thể tiết kiệm</span>
+                            </div>
                             <div className="text-right">
-                                <div className="font-bold text-green-600 text-sm">
-                                    {formatCurrency(potentialMonthlySavings || 0)}/tháng
-                                </div>
-                                <div className="text-xs text-green-500">
-                                    {formatCurrency((potentialMonthlySavings || 0) * 12)}/năm
-                                </div>
+                                <span className="text-base font-bold text-emerald-600">{formatCurrency(savingsAmount)}</span>
+                                <span className="text-[10px] text-emerald-400 ml-1">/tháng</span>
                             </div>
                         </div>
                     )}
-
-                    {/* Action Badge */}
-                    <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full ${style.bg} mt-2`}>
-                        <Icon className={`w-3 h-3 ${style.color}`} />
-                        <span className={`text-xs font-medium ${style.color}`}>{style.text}</span>
-                    </div>
                 </div>
-            </div>
+            )}
         </div>
     )
 }
 
+// ── Main Component ──
 export default function SmartBudgetCard() {
     const { data, isLoading, error, refetch } = useQuery({
         queryKey: ['smartBudget'],
@@ -186,11 +218,14 @@ export default function SmartBudgetCard() {
     if (isLoading) {
         return (
             <div className="bg-white p-6 rounded-xl shadow-sm animate-pulse">
-                <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
-                <div className="h-3 bg-gray-200 rounded mb-4"></div>
-                <div className="space-y-3">
-                    <div className="h-16 bg-gray-100 rounded"></div>
-                    <div className="h-16 bg-gray-100 rounded"></div>
+                <div className="h-6 bg-gray-200 rounded w-1/3 mb-4" />
+                <div className="flex gap-4 mb-4">
+                    <div className="w-28 h-28 bg-gray-100 rounded-full" />
+                    <div className="flex-1 space-y-3">
+                        <div className="h-8 bg-gray-100 rounded" />
+                        <div className="h-8 bg-gray-100 rounded" />
+                        <div className="h-8 bg-gray-100 rounded" />
+                    </div>
                 </div>
             </div>
         )
@@ -201,7 +236,7 @@ export default function SmartBudgetCard() {
             <div className="bg-white p-6 rounded-xl shadow-sm">
                 <div className="text-center py-4">
                     <p className="text-gray-500">Không thể tải gợi ý ngân sách</p>
-                    <button 
+                    <button
                         onClick={() => refetch()}
                         className="mt-2 text-sm text-blue-600 hover:text-blue-800"
                     >
@@ -213,122 +248,131 @@ export default function SmartBudgetCard() {
     }
 
     const { suggestions, summary } = data.data || {}
+    const monthlyIncome = summary?.monthlyIncome || 0
+    const needsAdjust = summary?.needsAdjustment || 0
+    const totalSavings = summary?.potentialMonthlySavings || 0
+    const reduceSuggestions = suggestions?.filter(s => s.recommendation === 'reduce') || []
+    const otherSuggestions = suggestions?.filter(s => s.recommendation !== 'reduce') || []
 
     return (
-        <div className="bg-white p-6 rounded-xl shadow-sm">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                    <Wallet className="w-5 h-5 text-teal-600" />
-                    Gợi ý ngân sách thông minh
-                </h2>
-                <button 
-                    onClick={() => refetch()}
-                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                    title="Làm mới"
-                >
-                    <RefreshCw className="w-4 h-4 text-gray-500" />
-                </button>
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            {/* ── Header ── */}
+            <div className="px-5 pt-5 pb-0">
+                <div className="flex items-center justify-between mb-1">
+                    <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 text-teal-500" />
+                        Ngân sách thông minh
+                    </h2>
+                    <button
+                        onClick={() => refetch()}
+                        className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                        title="Làm mới"
+                    >
+                        <RefreshCw className="w-4 h-4 text-gray-400" />
+                    </button>
+                </div>
+                <p className="text-sm text-gray-400 mb-4">Phân tích 3 tháng · Quy tắc 50/30/20</p>
             </div>
 
-            {/* 50/30/20 Badge */}
-            <div className="inline-flex items-center gap-1 px-2 py-1 bg-teal-50 text-teal-700 text-xs rounded-full mb-4">
-                <Wallet className="w-3 h-3" />
-                <span>Quy tắc 50/30/20</span>
-            </div>
-
-            {/* Summary */}
+            {/* ── Overview: Donut + breakdown ── */}
             {summary && (
-                <>
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                        <div className="p-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
-                            <p className="text-xs text-gray-600 mb-1">Thu nhập/tháng</p>
-                            <p className="text-lg font-bold text-blue-700">
-                                {formatCurrency(summary.monthlyIncome || 0)}
-                            </p>
-                        </div>
-                        <div className="p-3 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
-                            <p className="text-xs text-gray-600 mb-1">Tiết kiệm tiềm năng</p>
-                            <p className="text-lg font-bold text-green-700">
-                                {formatCurrency(summary.potentialMonthlySavings || 0)}
-                            </p>
-                            <p className="text-xs text-green-600">
-                                {formatCurrency(summary.potentialYearlySavings || 0)}/năm
-                            </p>
+                <div className="px-5 pb-4">
+                    <div className="flex items-center gap-5">
+                        <DonutChart
+                            essentials={summary.essentials}
+                            wants={summary.wants}
+                            savings={summary.savings}
+                            income={monthlyIncome}
+                        />
+
+                        {/* Legend + amounts */}
+                        <div className="flex-1 space-y-3">
+                            {[
+                                { label: 'Thiết yếu', pct: '50%', amount: summary.essentials, color: '#3b82f6', icon: '🏠' },
+                                { label: 'Mong muốn', pct: '30%', amount: summary.wants, color: '#f97316', icon: '🛍️' },
+                                { label: 'Tiết kiệm', pct: '20%', amount: summary.savings, color: '#22c55e', icon: '💰' },
+                            ].map((item) => (
+                                <div key={item.label} className="flex items-center gap-2.5">
+                                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
+                                    <span className="text-sm text-gray-500 w-20">{item.label}</span>
+                                    <span className="text-sm font-semibold text-gray-700 flex-1 text-right">
+                                        {formatCurrency(item.amount || 0)}
+                                    </span>
+                                </div>
+                            ))}
                         </div>
                     </div>
 
-                    {(summary.needsAdjustment || 0) > 0 && (
-                        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                            <div className="flex items-center gap-2">
-                                <Wallet className="w-4 h-4 text-amber-600" />
-                                <span className="text-sm font-medium text-amber-800">
-                                    {summary.needsAdjustment} danh mục cần điều chỉnh
-                                </span>
-                            </div>
+                    {/* Quick stats row */}
+                    {(needsAdjust > 0 || totalSavings > 0) && (
+                        <div className="flex gap-2 mt-4">
+                            {needsAdjust > 0 && (
+                                <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg">
+                                    <ShoppingCart className="w-4 h-4 text-amber-500" />
+                                    <span className="text-sm text-amber-700 font-medium">
+                                        {needsAdjust} mục cần giảm
+                                    </span>
+                                </div>
+                            )}
+                            {totalSavings > 0 && (
+                                <div className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-emerald-50 rounded-lg">
+                                    <PiggyBank className="w-4 h-4 text-emerald-500" />
+                                    <span className="text-sm text-emerald-700 font-medium">
+                                        Tiết kiệm ~{formatShort(totalSavings)}/tháng
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     )}
-
-                    <BudgetRuleBar 
-                        essentials={summary.essentials || 0}
-                        wants={summary.wants || 0}
-                        savings={summary.savings || 0}
-                    />
-
-                    <div className="grid grid-cols-3 gap-2 mb-4 text-center">
-                        <div className="p-2 bg-blue-50 rounded-lg">
-                            <p className="text-xs text-gray-600">Thiết yếu</p>
-                            <p className="text-sm font-semibold text-blue-600">
-                                {formatCurrency(summary.essentials || 0)}
-                            </p>
-                        </div>
-                        <div className="p-2 bg-orange-50 rounded-lg">
-                            <p className="text-xs text-gray-600">Mong muốn</p>
-                            <p className="text-sm font-semibold text-orange-600">
-                                {formatCurrency(summary.wants || 0)}
-                            </p>
-                        </div>
-                        <div className="p-2 bg-green-50 rounded-lg">
-                            <p className="text-xs text-gray-600">Tiết kiệm</p>
-                            <p className="text-sm font-semibold text-green-600">
-                                {formatCurrency(summary.savings || 0)}
-                            </p>
-                        </div>
-                    </div>
-                </>
-            )}
-
-            {/* Suggestions */}
-            {suggestions && suggestions.length > 0 ? (
-                <>
-                    <div className="flex items-center justify-between mb-3">
-                        <p className="text-sm font-medium text-gray-700">
-                            Gợi ý chi tiết ({suggestions.length})
-                        </p>
-                        <span className="text-xs text-gray-400">
-                            Dựa trên chi tiêu 3 tháng
-                        </span>
-                    </div>
-                    <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-                        {suggestions.map((suggestion, index) => (
-                            <SuggestionItem key={index} suggestion={suggestion} />
-                        ))}
-                    </div>
-                </>
-            ) : (
-                <div className="text-center py-6">
-                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <Check className="w-8 h-8 text-green-500" />
-                    </div>
-                    <p className="text-gray-600 font-medium">Chi tiêu hợp lý!</p>
-                    <p className="text-sm text-gray-400 mt-1">Không cần điều chỉnh</p>
                 </div>
             )}
 
-            {/* Footer */}
-            <div className="mt-4 pt-3 border-t border-gray-100 text-center">
+            {/* ── Divider ── */}
+            <div className="border-t border-gray-100" />
+
+            {/* ── Suggestion list ── */}
+            <div className="px-5 py-4">
+                {suggestions && suggestions.length > 0 ? (
+                    <>
+                        {reduceSuggestions.length > 0 && (
+                            <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                                Cần điều chỉnh
+                            </p>
+                        )}
+                        <div className="space-y-2">
+                            {reduceSuggestions.map((s, i) => (
+                                <SuggestionItem key={`r-${i}`} suggestion={s} income={monthlyIncome} />
+                            ))}
+                        </div>
+
+                        {otherSuggestions.length > 0 && (
+                            <>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 mt-4">
+                                    Đang hợp lý
+                                </p>
+                                <div className="space-y-2">
+                                    {otherSuggestions.map((s, i) => (
+                                        <SuggestionItem key={`o-${i}`} suggestion={s} income={monthlyIncome} />
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </>
+                ) : (
+                    <div className="text-center py-6">
+                        <div className="w-14 h-14 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <Check className="w-7 h-7 text-emerald-500" />
+                        </div>
+                        <p className="text-sm font-medium text-gray-700">Chi tiêu hợp lý!</p>
+                        <p className="text-xs text-gray-400 mt-1">Không cần điều chỉnh gì</p>
+                    </div>
+                )}
+            </div>
+
+            {/* ── Footer ── */}
+            <div className="px-5 py-2.5 bg-gray-50 text-center">
                 <p className="text-xs text-gray-400">
-                    Dựa trên chi tiêu 3 tháng gần đây
+                    Dựa trên chi tiêu 3 tháng gần đây · Cập nhật mỗi 5 phút
                 </p>
             </div>
         </div>

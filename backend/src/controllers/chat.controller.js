@@ -69,25 +69,28 @@ TÍNH CÁCH CỦA BẠN:
 
 CÁCH NÓI CHUYỆN:
 - Thay vì "Tôi" → dùng "mình" hoặc "tớ"
-- Thay vì "Bạn" → dùng "bạn", "cậu", hoặc tên nếu biết
+- Luôn gọi người dùng là "bạn". KHÔNG dùng "cậu" trong mọi câu trả lời
 - Có thể dùng: "nha", "nhé", "á", "đó", "hen"
 - Ví dụ: "Oke ghi rồi nha!", "Xịn đấy!", "Chill thôi, từ từ tính"
+- Khi user hỏi "bạn là ai", "cậu là ai", "bạn tên gì" → trả lời thật ngắn, tự nhiên. Ví dụ: "Mình là FinBot, bạn đồng hành giúp bạn theo dõi chi tiêu và quản lý tiền. Cần gì về tiền bạc cứ hỏi mình nha."
+- Không tự giới thiệu dài dòng, không nói kiểu quảng cáo, không nhấn mạnh "không phải robot/trợ lý AI" trong câu trả lời.
 
 ⚠️ QUY TẮC QUAN TRỌNG VỀ SỐ DƯ:
 - LUÔN LUÔN sử dụng số liệu từ "DỮ LIỆU TÀI CHÍNH CỦA NGƯỜI DÙNG" được cung cấp trong context
 - KHÔNG TỰ Ý tính toán hoặc cộng dồn số dư từ lịch sử chat
 - Khi user hỏi "số dư hiện tại", "còn lại bao nhiêu", "balance" → trả lời CHÍNH XÁC số "Còn lại" trong dữ liệu context
 - TUYỆT ĐỐI KHÔNG nhớ hoặc tham khảo số dư từ tin nhắn trước đó
-- Nếu không có dữ liệu context, nói rõ "Mình chưa có dữ liệu, cậu cho mình biết thu nhập và chi tiêu nhé"
+- Nếu không có dữ liệu context, nói rõ "Mình chưa có dữ liệu, bạn cho mình biết thu nhập và chi tiêu nhé"
+- Nếu user hỏi cách chi tiêu/lập kế hoạch với số tiền còn lại đến cuối tháng → KHÔNG chỉ nhắc lại số dư. Hãy chia ngân sách theo số ngày còn lại, ưu tiên ăn uống/di chuyển/hóa đơn cần thiết, đưa hạn mức/ngày và gợi ý khoản nên tránh.
 
 VÍ DỤ ĐÚNG:
 User: "số dư hiện tại?"
 Context: "Còn lại: 4.805.000đ"
-Bot: "Số dư hiện tại của cậu là 4.805.000đ."
+Bot: "Số dư hiện tại của bạn là 4.805.000đ."
 
 VÍ DỤ SAI (TUYỆT ĐỐI TRÁNH):
 User: "số dư hiện tại?"
-Bot: "Cậu vừa nhận 1tr, trước đó có 5tr, nên bây giờ là 6tr" ❌ SAI - KHÔNG TỰ TÍNH
+Bot: "Bạn vừa nhận 1tr, trước đó có 5tr, nên bây giờ là 6tr" ❌ SAI - KHÔNG TỰ TÍNH
 
 ${FINANCE_KNOWLEDGE}
 
@@ -141,7 +144,7 @@ Bot: Mình hay làm thế này nè:
 - Nấu cơm mang đi làm, tiết kiệm được 2-3 triệu/tháng luôn á
 - Trước khi mua gì, đợi 24h xem còn muốn không
 
-Cậu đang khó ở chỗ nào nhất?
+Bạn đang khó ở chỗ nào nhất?
 
 User: "oke thanks"
 Bot: Không có gì, cần gì cứ hú mình nha!
@@ -158,10 +161,6 @@ LƯU Ý QUAN TRỌNG:
 - Đưa lời khuyên thực tế, không lý thuyết suông`;
 
 
-
-/**
- * Lấy dữ liệu tài chính của user để cung cấp context cho AI
- */
 async function getUserFinancialContext(userId) {
   if (!userId) return null;
 
@@ -170,14 +169,12 @@ async function getUserFinancialContext(userId) {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
     const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1).toISOString().split('T')[0];
 
-    // Lấy giao dịch tháng này
     const { data: thisMonthTx } = await supabase
       .from('transactions')
       .select('amount, type, categories(name)')
       .eq('user_id', userId)
       .gte('transaction_date', startOfMonth);
 
-    // Lấy giao dịch 3 tháng gần đây
     const { data: recentTx } = await supabase
       .from('transactions')
       .select('amount, type, categories(name), transaction_date')
@@ -185,24 +182,20 @@ async function getUserFinancialContext(userId) {
       .gte('transaction_date', threeMonthsAgo)
       .order('transaction_date', { ascending: false });
 
-    // Tính toán
     const thisMonthIncome = thisMonthTx?.filter(t => t.type === 'income').reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
     const thisMonthExpense = thisMonthTx?.filter(t => t.type === 'expense').reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
 
-    // Chi tiêu theo danh mục tháng này
     const expenseByCategory = {};
     thisMonthTx?.filter(t => t.type === 'expense').forEach(t => {
       const cat = t.categories?.name || 'Khác';
       expenseByCategory[cat] = (expenseByCategory[cat] || 0) + parseFloat(t.amount);
     });
 
-    // Top 5 danh mục chi tiêu
     const topCategories = Object.entries(expenseByCategory)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([name, amount]) => `${name}: ${formatVND(amount)}`);
 
-    // Tính trung bình 3 tháng
     const totalExpense3m = recentTx?.filter(t => t.type === 'expense').reduce((s, t) => s + parseFloat(t.amount), 0) || 0;
     const avgMonthlyExpense = totalExpense3m / 3;
 
@@ -224,6 +217,143 @@ async function getUserFinancialContext(userId) {
 
 function formatVND(amount) {
   return new Intl.NumberFormat('vi-VN').format(amount) + 'đ';
+}
+
+function normalizeBotAddressing(text) {
+  if (!text) return text;
+
+  return text
+    .replace(/\bCậu\b/g, 'Bạn')
+    .replace(/\bcậu\b/g, 'bạn');
+}
+
+async function saveChatMessage(userId, conversationId, role, content, metadata = null) {
+  if (!userId || !conversationId || !content) return;
+
+  try {
+    const { error } = await supabase
+      .from('chat_history')
+      .insert({
+        user_id: userId,
+        conversation_id: conversationId,
+        role,
+        content,
+        metadata
+      });
+
+    if (error) {
+      console.error('Failed to save chat history:', error.message);
+    }
+  } catch (error) {
+    console.error('Failed to save chat history:', error.message);
+  }
+}
+
+async function clearPersistedChatHistory(userId, conversationId) {
+  if (!userId || !conversationId) return;
+
+  try {
+    const { error } = await supabase
+      .from('chat_history')
+      .delete()
+      .eq('user_id', userId)
+      .eq('conversation_id', conversationId);
+
+    if (error) {
+      console.error('Failed to clear chat history:', error.message);
+    }
+  } catch (error) {
+    console.error('Failed to clear chat history:', error.message);
+  }
+}
+
+function normalizeText(text) {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isIdentityQuestion(message) {
+  const text = normalizeText(message);
+  if (text.length > 60) return false;
+
+  return [
+    'ban la ai',
+    'cau la ai',
+    'may la ai',
+    'bot la ai',
+    'finbot la ai',
+    'ban ten gi',
+    'cau ten gi',
+    'ten ban la gi',
+    'gioi thieu ban than'
+  ].some(pattern => text === pattern || text.includes(pattern));
+}
+
+function isSpendingPlanQuestion(message) {
+  const text = normalizeText(message);
+
+  const hasPlanningIntent = /(\bnen\b|nhu the nao|lam sao|cach|ke hoach|phan bo|du tinh|sap xep|quan ly|chi tieu)/i.test(text);
+  const hasRemainingMoneyContext = /(so tien con lai|tien con lai|con lai|so du|balance)/i.test(text);
+  const hasTimeRange = /(den het thang|cuoi thang|het thang|thang nay|may ngay toi|tuan nay|05\/2026)/i.test(text);
+
+  return hasPlanningIntent && (hasRemainingMoneyContext || hasTimeRange);
+}
+
+function isDirectBalanceQuestion(message) {
+  const text = normalizeText(message);
+  if (isSpendingPlanQuestion(message)) return false;
+
+  const directPatterns = [
+    /^so du( hien tai)?( cua (toi|minh|tui|em|anh|ban|cau))?( la)? bao nhieu$/,
+    /^so du( hien tai)?$/,
+    /^con lai bao nhieu( tien)?$/,
+    /^minh con bao nhieu( tien)?$/,
+    /^toi con bao nhieu( tien)?$/,
+    /^balance$/,
+    /^balance hien tai$/
+  ];
+
+  return directPatterns.some(pattern => pattern.test(text))
+    || (/(so du|balance)/i.test(text) && /bao nhieu|hien tai/i.test(text))
+    || (/con lai/i.test(text) && /bao nhieu/i.test(text) && !/nen|chi tieu|ke hoach|phan bo|den het thang|cuoi thang/i.test(text));
+}
+
+function isFinancialDataQuestion(message) {
+  const text = normalizeText(message);
+  if (isSpendingPlanQuestion(message)) return false;
+
+  return isDirectBalanceQuestion(message)
+    || (/(thu nhap|chi tieu|tong)/i.test(text) && /(bao nhieu|hien tai|thang nay)/i.test(text));
+}
+
+function getDaysRemainingInCurrentMonth() {
+  const now = new Date();
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffMs = endOfMonth - startToday;
+
+  return Math.max(1, Math.floor(diffMs / (24 * 60 * 60 * 1000)) + 1);
+}
+
+function buildSpendingPlanResponse(financialContext) {
+  const balance = financialContext?.thisMonth?.balance || 0;
+  const daysRemaining = getDaysRemainingInCurrentMonth();
+  const dailyBudget = Math.floor(balance / daysRemaining);
+  const foodBudget = Math.floor(balance * 0.6);
+  const transportBudget = Math.floor(balance * 0.25);
+  const bufferBudget = balance - foodBudget - transportBudget;
+
+  if (balance <= 0) {
+    return 'Hiện tại bạn không còn dư trong tháng này, nên ưu tiên dừng các khoản không cần thiết trước nha. Nếu còn bắt buộc phải chi, mình nên ghi riêng từng khoản để biết cần bù từ đâu.';
+  }
+
+  return `Với ${formatVND(balance)} còn lại đến hết tháng, bạn nên giữ mức khoảng ${formatVND(dailyBudget)}/ngày trong ${daysRemaining} ngày tới.\n\nGợi ý chia nhanh:\n- Ăn uống/nhu yếu phẩm: khoảng ${formatVND(foodBudget)}\n- Di chuyển: khoảng ${formatVND(transportBudget)}\n- Dự phòng việc gấp: khoảng ${formatVND(bufferBudget)}\n\nTừ giờ đến cuối tháng nên hạn chế mua sắm, cafe/trà sữa, app đồ ăn và các khoản giải trí phát sinh. Mỗi ngày cứ nhìn mốc ${formatVND(dailyBudget)} mà canh, ngày nào chi ít hơn thì phần dư để bù cho ngày sau.`;
 }
 
 /**
@@ -326,6 +456,31 @@ exports.sendMessage = async (req, res) => {
       });
     }
 
+    if (isIdentityQuestion(message)) {
+      const historyKey = conversationId || `${userId || 'anon'}-${Date.now()}`;
+      const aiResponse = 'Mình là FinBot, bạn đồng hành giúp bạn theo dõi chi tiêu và quản lý tiền. Cần gì về tiền bạc cứ hỏi mình nha.';
+      const history = conversationHistory.get(historyKey) || [];
+
+      history.push({ role: 'user', content: message });
+      history.push({ role: 'assistant', content: aiResponse });
+      conversationHistory.set(historyKey, history.slice(-20));
+      await saveChatMessage(userId, historyKey, 'user', message, { source: 'identity_question' });
+      await saveChatMessage(userId, historyKey, 'assistant', aiResponse, { source: 'identity_question' });
+
+      setTimeout(() => {
+        conversationHistory.delete(historyKey);
+      }, 60 * 60 * 1000);
+
+      return res.json({
+        success: true,
+        data: {
+          message: aiResponse,
+          conversationId: historyKey,
+          transactionCreated: null
+        }
+      });
+    }
+
     // Lấy dữ liệu tài chính của user
     const financialContext = await getUserFinancialContext(userId);
     
@@ -346,6 +501,7 @@ DỮ LIỆU TÀI CHÍNH CỦA NGƯỜI DÙNG (tháng này - CẬP NHẬT MỚI N
 - Thu nhập: ${formatVND(financialContext.thisMonth.income)}
 - Chi tiêu: ${formatVND(financialContext.thisMonth.expense)}
 - Còn lại: ${formatVND(financialContext.thisMonth.balance)}
+- Số ngày còn lại trong tháng (tính cả hôm nay): ${getDaysRemainingInCurrentMonth()} ngày
 - Chi tiêu TB/tháng (3 tháng): ${formatVND(financialContext.avgMonthlyExpense)}
 - Top chi tiêu: ${financialContext.topCategories.join(', ') || 'Chưa có'}
 
@@ -357,10 +513,14 @@ DỮ LIỆU TÀI CHÍNH CỦA NGƯỜI DÙNG (tháng này - CẬP NHẬT MỚI N
     const historyKey = conversationId || `${userId || 'anon'}-${Date.now()}`;
     let history = conversationHistory.get(historyKey) || [];
 
-    // ✨ KIỂM TRA: Nếu user hỏi về số dư/tài chính, XÓA HISTORY để tránh AI nhầm lẫn
-    const isFinancialQuery = /số dư|còn lại|balance|bao nhiêu|hiện tại|tổng|thu nhập|chi tiêu/i.test(message);
+    const isBalanceQuery = isDirectBalanceQuestion(message);
+    const isFinancialQuery = isFinancialDataQuestion(message);
+    const isSpendingPlanQuery = isSpendingPlanQuestion(message);
+
+    // ✨ KIỂM TRA: Chỉ xóa history với câu hỏi số liệu trực tiếp để tránh AI nhầm số cũ.
+    // Các câu xin tư vấn như "với số tiền còn lại đó nên chi tiêu thế nào" vẫn giữ history.
     if (isFinancialQuery && financialContext) {
-      console.log('🔄 Financial query detected - clearing history to prevent AI confusion');
+      console.log('🔄 Financial data query detected - clearing history to prevent AI confusion');
       history = []; // Xóa history để AI chỉ dựa vào dữ liệu thực
     }
 
@@ -369,6 +529,7 @@ DỮ LIỆU TÀI CHÍNH CỦA NGƯỜI DÙNG (tháng này - CẬP NHẬT MỚI N
       role: 'user',
       content: message
     });
+    await saveChatMessage(userId, historyKey, 'user', message);
 
     // Giới hạn history
     if (history.length > 20) {
@@ -393,7 +554,7 @@ DỮ LIỆU TÀI CHÍNH CỦA NGƯỜI DÙNG (tháng này - CẬP NHẬT MỚI N
     let aiResponse = completion.choices[0]?.message?.content || 'Xin lỗi, tôi không thể trả lời lúc này.';
 
     // ✨ KIỂM TRA VÀ SỬA LỖI: Nếu user hỏi về số dư, đảm bảo AI trả lời đúng
-    if (isFinancialQuery && financialContext) {
+    if (isBalanceQuery && financialContext) {
       const correctBalance = formatVND(financialContext.thisMonth.balance);
       const correctIncome = formatVND(financialContext.thisMonth.income);
       const correctExpense = formatVND(financialContext.thisMonth.expense);
@@ -405,10 +566,18 @@ DỮ LIỆU TÀI CHÍNH CỦA NGƯỜI DÙNG (tháng này - CẬP NHẬT MỚI N
       if (match && !aiResponse.includes(correctBalance)) {
         console.log('⚠️ AI response contains incorrect balance, correcting...');
         // Thay thế bằng số dư chính xác
-        aiResponse = `Số dư hiện tại của cậu là ${correctBalance} (thu nhập ${correctIncome}, chi tiêu ${correctExpense}).`;
-      } else if (/số dư|còn lại|balance/i.test(message) && !match) {
+        aiResponse = `Số dư hiện tại của bạn là ${correctBalance} (thu nhập ${correctIncome}, chi tiêu ${correctExpense}).`;
+      } else if (!match) {
         // User hỏi số dư nhưng AI không trả lời rõ ràng
-        aiResponse = `Số dư hiện tại của cậu là ${correctBalance}.`;
+        aiResponse = `Số dư hiện tại của bạn là ${correctBalance}.`;
+      }
+    }
+
+    if (isSpendingPlanQuery && financialContext) {
+      const balanceOnlyResponse = /^số dư hiện tại của (bạn|cậu) là [\d.,\s]+đ\.?$/i.test(aiResponse.trim());
+      if (balanceOnlyResponse) {
+        console.log('⚠️ Spending plan query got balance-only response, replacing with plan...');
+        aiResponse = buildSpendingPlanResponse(financialContext);
       }
     }
 
@@ -516,7 +685,7 @@ DỮ LIỆU TÀI CHÍNH CỦA NGƯỜI DÙNG (tháng này - CẬP NHẬT MỚI N
                 // Nếu AI chưa đề cập đến số dư mới, thêm vào
                 if (!aiResponse.includes(formatVND(newBalance))) {
                   if (txType === 'income') {
-                    aiResponse += `\n\nSố dư mới của cậu là ${formatVND(newBalance)}.`;
+                    aiResponse += `\n\nSố dư mới của bạn là ${formatVND(newBalance)}.`;
                   } else {
                     aiResponse += `\n\nSố dư còn lại: ${formatVND(newBalance)}.`;
                   }
@@ -544,10 +713,17 @@ DỮ LIỆU TÀI CHÍNH CỦA NGƯỜI DÙNG (tháng này - CẬP NHẬT MỚI N
       aiResponse += '\n\nBạn cần đăng nhập để tôi có thể ghi chi tiêu cho bạn.';
     }
 
+    aiResponse = normalizeBotAddressing(aiResponse);
+
     // Thêm response vào history
     history.push({
       role: 'assistant',
       content: aiResponse
+    });
+    await saveChatMessage(userId, historyKey, 'assistant', aiResponse, {
+      transactionCreated,
+      isBalanceQuery,
+      isSpendingPlanQuery
     });
 
     conversationHistory.set(historyKey, history);
@@ -596,9 +772,11 @@ DỮ LIỆU TÀI CHÍNH CỦA NGƯỜI DÙNG (tháng này - CẬP NHẬT MỚI N
 exports.clearHistory = async (req, res) => {
   try {
     const { conversationId } = req.body;
+    const userId = req.user?.id;
     
     if (conversationId) {
       conversationHistory.delete(conversationId);
+      await clearPersistedChatHistory(userId, conversationId);
     }
 
     res.json({

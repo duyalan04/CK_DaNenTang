@@ -33,12 +33,25 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   late AnimationController _typingAnimationController;
 
   // Quick suggestions
-  final List<String> _quickSuggestions = [
-    '💰 Cách tiết kiệm tiền?',
-    '📊 Phân tích chi tiêu',
-    '🎯 Lập ngân sách',
-    '💡 Mẹo tài chính',
+  final List<Map<String, String>> _quickSuggestions = [
+    {
+      'label': '💰 Tiết kiệm',
+      'prompt': 'Gợi ý cho mình 3 cách tiết kiệm tiền phù hợp với chi tiêu hiện tại.',
+    },
+    {
+      'label': '📊 Phân tích chi tiêu',
+      'prompt': 'Phân tích chi tiêu tháng này của mình và chỉ ra khoản nào cần chú ý.',
+    },
+    {
+      'label': '🎯 Lập ngân sách',
+      'prompt': 'Lập ngân sách cho số tiền còn lại đến cuối tháng giúp mình.',
+    },
+    {
+      'label': '⚡ Ghi nhanh',
+      'prompt': 'Hướng dẫn mình ghi thu chi nhanh bằng tin nhắn ngắn.',
+    },
   ];
+  List<Map<String, String>> _followUpSuggestions = [];
 
   @override
   void initState() {
@@ -50,13 +63,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
     // Welcome message
     _messages.add(ChatMessage(
-      content: 'Xin chào! 👋 Tôi là FinBot - trợ lý tài chính AI của bạn.\n\n'
-          '💬 Tôi có thể giúp bạn:\n'
-          '• Tư vấn quản lý chi tiêu\n'
-          '• Lập kế hoạch ngân sách\n'
-          '• Phân tích thói quen tài chính\n'
-          '• Trả lời câu hỏi về tài chính\n\n'
-          'Hãy hỏi tôi bất cứ điều gì! 🚀',
+      content: 'Xin chào! 👋 Mình là FinBot - trợ lý tài chính AI của bạn.\n\n'
+          'Mình có thể giúp bạn ghi nhanh thu chi, xem số dư, phân tích chi tiêu và lập ngân sách. Bạn cứ nhắn tự nhiên, ví dụ: "50k cafe" hoặc "lương 15tr".',
       isUser: false,
     ));
   }
@@ -93,6 +101,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
     setState(() {
       _messages.add(ChatMessage(content: text, isUser: true));
+      _followUpSuggestions = [];
       _isLoading = true;
     });
     _scrollToBottom();
@@ -114,6 +123,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           isUser: false,
           isError: isError,
         ));
+        _followUpSuggestions = isError ? [] : _buildSmartSuggestions(text, response);
         _isLoading = false;
       });
 
@@ -145,6 +155,77 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   String _formatCurrency(num value) {
     return '${(value / 1000).toStringAsFixed(0)}k đ';
+  }
+
+  List<Map<String, String>> _buildSmartSuggestions(String userText, ChatResponse response) {
+    final text = userText.toLowerCase();
+    final reply = response.message.toLowerCase();
+
+    if (response.hasTransaction) {
+      return [
+        {
+          'label': '💳 Xem số dư',
+          'prompt': 'Số dư hiện tại của mình là bao nhiêu?',
+        },
+        {
+          'label': '🎯 Chia ngân sách',
+          'prompt': 'Với số dư còn lại, mình nên chi tiêu thế nào đến cuối tháng?',
+        },
+        {
+          'label': '📊 Phân tích tháng này',
+          'prompt': 'Phân tích nhanh thu nhập và chi tiêu tháng này của mình.',
+        },
+      ];
+    }
+
+    if (text.contains('ngân sách') || text.contains('số dư') || reply.contains('số dư')) {
+      return [
+        {
+          'label': '🍽️ Chia theo ngày',
+          'prompt': 'Chia số tiền còn lại thành hạn mức chi tiêu mỗi ngày giúp mình.',
+        },
+        {
+          'label': '🧾 Ưu tiên khoản cần',
+          'prompt': 'Những khoản nào mình nên ưu tiên trả trước trong tháng này?',
+        },
+        {
+          'label': '🚫 Khoản nên cắt',
+          'prompt': 'Gợi ý các khoản mình nên hạn chế để không vượt ngân sách.',
+        },
+      ];
+    }
+
+    if (text.contains('tiết kiệm') || text.contains('mẹo')) {
+      return [
+        {
+          'label': '📌 Kế hoạch 7 ngày',
+          'prompt': 'Lập cho mình kế hoạch tiết kiệm trong 7 ngày tới.',
+        },
+        {
+          'label': '🔍 Tìm khoản lãng phí',
+          'prompt': 'Dựa vào chi tiêu tháng này, khoản nào có thể đang bị lãng phí?',
+        },
+        {
+          'label': '🎯 Mục tiêu nhỏ',
+          'prompt': 'Gợi ý một mục tiêu tiết kiệm nhỏ và dễ làm cho mình.',
+        },
+      ];
+    }
+
+    return [
+      {
+        'label': '💳 Xem số dư',
+        'prompt': 'Số dư hiện tại của mình là bao nhiêu?',
+      },
+      {
+        'label': '📊 Phân tích chi tiêu',
+        'prompt': 'Phân tích chi tiêu tháng này của mình.',
+      },
+      {
+        'label': '✍️ Ghi giao dịch',
+        'prompt': 'Mình muốn ghi một giao dịch mới.',
+      },
+    ];
   }
 
   void _retryLastMessage() {
@@ -241,22 +322,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             ),
           ),
 
-          // Quick suggestions (show only when not loading and few messages)
+          // Quick suggestions
           if (!_isLoading && _messages.length <= 2)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _quickSuggestions.map((suggestion) {
-                  return ActionChip(
-                    label: Text(suggestion, style: const TextStyle(fontSize: 12)),
-                    onPressed: () => _sendMessage(suggestion),
-                    backgroundColor: colorScheme.surfaceContainerHighest,
-                  );
-                }).toList(),
-              ),
-            ),
+            _buildSuggestionChips(_quickSuggestions),
+          if (!_isLoading && _messages.length > 2 && _followUpSuggestions.isNotEmpty)
+            _buildSuggestionChips(_followUpSuggestions),
 
           // Input area
           Container(
@@ -351,8 +421,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               await ChatService.clearHistory();
               setState(() {
                 _messages.clear();
+                _followUpSuggestions = [];
                 _messages.add(ChatMessage(
-                  content: '🎉 Đã bắt đầu cuộc trò chuyện mới!\n\nTôi có thể giúp gì cho bạn?',
+                  content: '🎉 Đã bắt đầu cuộc trò chuyện mới!\n\nMình có thể giúp gì cho bạn?',
                   isUser: false,
                 ));
               });
@@ -361,6 +432,31 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             child: const Text('Xóa'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSuggestionChips(List<Map<String, String>> suggestions) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: suggestions.map((suggestion) {
+          return ActionChip(
+            avatar: const Icon(Icons.auto_awesome, size: 16),
+            label: Text(
+              suggestion['label']!,
+              style: const TextStyle(fontSize: 12),
+            ),
+            onPressed: () => _sendMessage(suggestion['prompt']!),
+            backgroundColor: colorScheme.surfaceContainerHighest,
+            side: BorderSide(color: colorScheme.outlineVariant),
+          );
+        }).toList(),
       ),
     );
   }

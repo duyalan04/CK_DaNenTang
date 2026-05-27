@@ -9,6 +9,7 @@ exports.getAll = async (req, res) => {
       .select('*, categories(name, icon, color)')
       .eq('user_id', req.user.id)
       .order('transaction_date', { ascending: false })
+      .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
     if (startDate) query = query.gte('transaction_date', startDate);
@@ -113,7 +114,26 @@ exports.delete = async (req, res) => {
 exports.createFromOCR = async (req, res) => {
   try {
     const { ocrData, categoryId, transactionDate } = req.body;
-    // ocrData: { rawText, extractedAmount, extractedItems }
+    // ocrData: { rawText, extractedAmount, extractedItems, receiptItems, aiAnalysis }
+    const aiAnalysis = ocrData.aiAnalysis || {};
+    const receiptItems = ocrData.receiptItems || aiAnalysis.items || [];
+    const itemNames = ocrData.extractedItems || receiptItems.map(item => item.name).filter(Boolean);
+    const storeName = ocrData.storeName || aiAnalysis.storeName;
+    const itemPreview = itemNames.slice(0, 2).join(', ');
+    const itemCountText = receiptItems.length > 0 ? ` (${receiptItems.length} sản phẩm)` : '';
+    const description = storeName
+      ? `${storeName}${itemCountText}${itemPreview ? ` - ${itemPreview}` : ''}`
+      : itemNames.join(', ') || 'OCR Import';
+    const normalizedOcrData = {
+      ...ocrData,
+      receiptItems,
+      extractedItems: itemNames,
+      storeName,
+      invoiceNumber: ocrData.invoiceNumber || aiAnalysis.invoiceNumber,
+      receiptDate: ocrData.receiptDate || aiAnalysis.date,
+      receiptTime: ocrData.receiptTime || aiAnalysis.time,
+      totalAmount: ocrData.totalAmount || aiAnalysis.totalAmount || ocrData.extractedAmount,
+    };
 
     const { data, error } = await supabase
       .from('transactions')
@@ -122,9 +142,9 @@ exports.createFromOCR = async (req, res) => {
         category_id: categoryId,
         amount: ocrData.extractedAmount,
         type: 'expense',
-        description: ocrData.extractedItems?.join(', ') || 'OCR Import',
+        description,
         transaction_date: transactionDate || new Date().toISOString().split('T')[0],
-        ocr_data: ocrData
+        ocr_data: normalizedOcrData
       })
       .select('*, categories(name, icon, color)')
       .single();

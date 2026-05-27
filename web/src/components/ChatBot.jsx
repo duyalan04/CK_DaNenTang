@@ -9,7 +9,7 @@ export default function ChatBot() {
     const [messages, setMessages] = useState([
         {
             role: 'assistant',
-            content: 'Hey! Mình là FinBot, bạn thân tài chính của cậu đây.\n\nCậu có thể nhắn kiểu "50k cafe" hay "lương 15tr" để mình ghi giúp, hoặc hỏi gì về tiền nong cũng được nha!'
+            content: 'Chào bạn, mình là FinBot.\n\nMình có thể giúp ghi nhanh thu chi, xem số dư và gợi ý cách quản lý chi tiêu. Bạn cứ nhắn tự nhiên, ví dụ: "50k cafe" hoặc "lương 15tr".'
         }
     ])
     const [input, setInput] = useState('')

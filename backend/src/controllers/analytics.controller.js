@@ -5,6 +5,9 @@ const groq = new Groq({
     apiKey: process.env.GROQ_API_KEY
 });
 
+const INSIGHTS_CACHE_TYPE = 'monthly';
+const INSIGHTS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
 /**
  * Tính Z-score cho một giá trị
  * Z = (x - μ) / σ
@@ -143,16 +146,88 @@ exports.detectAnomalies = async (req, res) => {
             return new Date(b.transaction.transaction_date) - new Date(a.transaction.transaction_date);
         });
 
+        // === LƯU VÀO BẢNG anomaly_logs ===
+        if (anomalies.length > 0) {
+            try {
+                // Lấy danh sách anomaly đã tồn tại (theo transaction_id)
+                const transactionIds = anomalies.map(a => a.id);
+                const { data: existingLogs } = await supabase
+                    .from('anomaly_logs')
+                    .select('transaction_id')
+                    .eq('user_id', userId)
+                    .in('transaction_id', transactionIds);
+
+                const existingTxIds = new Set((existingLogs || []).map(l => l.transaction_id));
+
+                // Chỉ insert các anomaly mới (chưa có trong DB)
+                const newAnomalyRows = anomalies
+                    .filter(a => !existingTxIds.has(a.id))
+                    .map(a => ({
+                        user_id: userId,
+                        transaction_id: a.id,
+                        anomaly_type: a.anomaly_type,
+                        severity: a.severity,
+                        z_score: parseFloat(a.z_score),
+                        description: a.description,
+                        is_dismissed: false
+                    }));
+
+                if (newAnomalyRows.length > 0) {
+                    const { error: insertError } = await supabase
+                        .from('anomaly_logs')
+                        .insert(newAnomalyRows);
+
+                    if (insertError) {
+                        console.warn('Không thể lưu anomaly_logs:', insertError.message);
+                    } else {
+                        console.log(`✅ Đã lưu ${newAnomalyRows.length} anomaly mới vào anomaly_logs`);
+                    }
+                }
+
+                // Xóa anomaly cũ không còn bất thường nữa (giao dịch đã trở lại bình thường)
+                if (existingLogs && existingLogs.length > 0) {
+                    const currentTxIds = new Set(transactionIds);
+                    const obsoleteTxIds = existingLogs
+                        .filter(l => !currentTxIds.has(l.transaction_id))
+                        .map(l => l.transaction_id);
+
+                    if (obsoleteTxIds.length > 0) {
+                        await supabase
+                            .from('anomaly_logs')
+                            .delete()
+                            .eq('user_id', userId)
+                            .in('transaction_id', obsoleteTxIds)
+                            .eq('is_dismissed', false);
+                    }
+                }
+            } catch (saveError) {
+                console.warn('Anomaly logs save warning:', saveError.message);
+                // Không throw — vẫn trả kết quả cho client
+            }
+        }
+
+        // Lấy trạng thái dismissed từ DB để filter
+        const { data: dismissedLogs } = await supabase
+            .from('anomaly_logs')
+            .select('transaction_id')
+            .eq('user_id', userId)
+            .eq('is_dismissed', true);
+
+        const dismissedTxIds = new Set((dismissedLogs || []).map(l => l.transaction_id));
+
+        // Filter bỏ các anomaly đã bị dismissed
+        const visibleAnomalies = anomalies.filter(a => !dismissedTxIds.has(a.id));
+
         res.json({
             success: true,
             data: {
-                anomalies: anomalies.slice(0, 10), // Giới hạn 10 anomaly gần nhất
+                anomalies: visibleAnomalies.slice(0, 10),
                 statistics: {
                     totalTransactions: transactions.length,
-                    anomalyCount: anomalies.length,
-                    highSeverity: anomalies.filter(a => a.severity === 'high').length,
-                    mediumSeverity: anomalies.filter(a => a.severity === 'medium').length,
-                    lowSeverity: anomalies.filter(a => a.severity === 'low').length
+                    anomalyCount: visibleAnomalies.length,
+                    highSeverity: visibleAnomalies.filter(a => a.severity === 'high').length,
+                    mediumSeverity: visibleAnomalies.filter(a => a.severity === 'medium').length,
+                    lowSeverity: visibleAnomalies.filter(a => a.severity === 'low').length
                 }
             }
         });
@@ -162,6 +237,42 @@ exports.detectAnomalies = async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Không thể phân tích anomaly'
+        });
+    }
+};
+
+/**
+ * Dismiss (bỏ qua) một anomaly — lưu vào DB
+ */
+exports.dismissAnomaly = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { transactionId } = req.params;
+        const { feedback } = req.body; // 'correct', 'false_positive', null
+
+        // Cập nhật is_dismissed trong anomaly_logs
+        const { data, error } = await supabase
+            .from('anomaly_logs')
+            .update({
+                is_dismissed: true,
+                user_feedback: feedback || null
+            })
+            .eq('user_id', userId)
+            .eq('transaction_id', transactionId)
+            .select();
+
+        if (error) throw error;
+
+        res.json({
+            success: true,
+            message: 'Đã bỏ qua cảnh báo',
+            data: data?.[0] || null
+        });
+    } catch (error) {
+        console.error('Dismiss anomaly error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Không thể cập nhật trạng thái anomaly'
         });
     }
 };
@@ -311,7 +422,6 @@ exports.calculateHealthScore = async (req, res) => {
             feedback = 'Cần cải thiện. Hãy xem xét lại thói quen chi tiêu của bạn.';
         }
 
-        // Gợi ý cải thiện
         const improvements = [];
         if (savingsRateScore < 20) {
             improvements.push('Cố gắng tiết kiệm ít nhất 20% thu nhập');
@@ -383,6 +493,34 @@ exports.calculateHealthScore = async (req, res) => {
 exports.generateInsights = async (req, res) => {
     try {
         const userId = req.user.id;
+        const forceRefresh = req.query.forceRefresh === 'true' || req.query.refresh === 'true';
+
+        if (!forceRefresh) {
+            const { data: cachedInsight, error: cacheError } = await supabase
+                .from('ai_insights_cache')
+                .select('content, valid_until, created_at')
+                .eq('user_id', userId)
+                .eq('insight_type', INSIGHTS_CACHE_TYPE)
+                .gt('valid_until', new Date().toISOString())
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (cacheError) {
+                console.warn('Insights cache read skipped:', cacheError.message);
+            } else if (cachedInsight?.content) {
+                return res.json({
+                    success: true,
+                    data: {
+                        ...cachedInsight.content,
+                        cache: {
+                            hit: true,
+                            validUntil: cachedInsight.valid_until
+                        }
+                    }
+                });
+            }
+        }
 
         // Lấy dữ liệu tổng hợp
         const threeMonthsAgo = new Date();
@@ -398,16 +536,26 @@ exports.generateInsights = async (req, res) => {
         if (error) throw error;
 
         if (transactions.length < 5) {
+            const responseData = {
+                insights: [{
+                    type: 'info',
+                    icon: 'info',
+                    title: 'Chưa đủ dữ liệu',
+                    content: 'Hãy ghi chép thêm giao dịch để nhận insights cá nhân hóa!'
+                }],
+                generatedAt: new Date().toISOString(),
+                basedOn: {
+                    transactionCount: transactions.length,
+                    period: '3 tháng gần đây'
+                },
+                cache: { hit: false }
+            };
+
+            await saveInsightCache(userId, responseData);
+
             return res.json({
                 success: true,
-                data: {
-                    insights: [{
-                        type: 'info',
-                        icon: 'info',
-                        title: 'Chưa đủ dữ liệu',
-                        content: 'Hãy ghi chép thêm giao dịch để nhận insights cá nhân hóa!'
-                    }]
-                }
+                data: responseData
             });
         }
 
@@ -468,16 +616,21 @@ Yêu cầu:
             content: line.trim()
         }));
 
+        const responseData = {
+            insights,
+            generatedAt: new Date().toISOString(),
+            basedOn: {
+                transactionCount: transactions.length,
+                period: '3 tháng gần đây'
+            },
+            cache: { hit: false }
+        };
+
+        await saveInsightCache(userId, responseData);
+
         res.json({
             success: true,
-            data: {
-                insights,
-                generatedAt: new Date().toISOString(),
-                basedOn: {
-                    transactionCount: transactions.length,
-                    period: '3 tháng gần đây'
-                }
-            }
+            data: responseData
         });
 
     } catch (error) {
@@ -488,6 +641,27 @@ Yêu cầu:
         });
     }
 };
+
+async function saveInsightCache(userId, content) {
+    try {
+        const validUntil = new Date(Date.now() + INSIGHTS_CACHE_TTL_MS).toISOString();
+
+        const { error } = await supabase
+            .from('ai_insights_cache')
+            .insert({
+                user_id: userId,
+                insight_type: INSIGHTS_CACHE_TYPE,
+                content,
+                valid_until: validUntil
+            });
+
+        if (error) {
+            console.warn('Insights cache write skipped:', error.message);
+        }
+    } catch (error) {
+        console.warn('Insights cache write failed:', error.message);
+    }
+}
 
 /**
  * Gợi ý tiết kiệm dựa trên phân tích chi tiêu

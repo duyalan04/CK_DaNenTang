@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Receipt, PiggyBank, BarChart3, LogOut } from 'lucide-react'
+import { LayoutDashboard, Receipt, PiggyBank, BarChart3, LogOut, UserCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useToast } from './Toast'
 import ChatBot from './ChatBot'
@@ -9,6 +9,7 @@ const navItems = [
   { path: '/transactions', icon: Receipt, label: 'Giao dịch' },
   { path: '/budgets', icon: PiggyBank, label: 'Ngân sách' },
   { path: '/reports', icon: BarChart3, label: 'Báo cáo' },
+  { path: '/profile', icon: UserCircle, label: 'Hồ sơ' },
 ]
 
 export default function Layout({ children }) {
@@ -24,7 +25,11 @@ export default function Layout({ children }) {
     <div className="min-h-screen flex">
       <aside className="w-64 bg-white border-r border-gray-200 p-4">
         <div className="mb-8">
-          <h1 className="text-xl font-bold text-blue-600">💰 Expense Tracker</h1>
+          <img
+            src="/favicon.png"
+            alt="Expense Tracker"
+            className="h-14 w-auto object-contain"
+          />
         </div>
         <nav className="space-y-2">
           {navItems.map(({ path, icon: Icon, label }) => (
@@ -41,13 +46,15 @@ export default function Layout({ children }) {
             </Link>
           ))}
         </nav>
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-4 py-2 mt-8 text-red-600 hover:bg-red-50 rounded-lg w-full"
-        >
-          <LogOut size={20} />
-          Đăng xuất
-        </button>
+        <div className="mt-8 pt-8 border-t border-gray-200">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg w-full"
+          >
+            <LogOut size={20} />
+            Đăng xuất
+          </button>
+        </div>
       </aside>
       <main className="flex-1 p-8">{children}</main>
       <ChatBot />

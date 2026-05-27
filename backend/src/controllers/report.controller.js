@@ -1,5 +1,85 @@
 const supabase = require('../config/supabase');
 
+const formatCurrency = (amount) =>
+  `${Math.round(Number(amount) || 0).toLocaleString('vi-VN')}đ`;
+
+const getBudgetAlert = (budget) => {
+  const amount = Number(budget.amount) || 0;
+  const spent = Number(budget.spent) || 0;
+  const percentage = Number(budget.percentage) || 0;
+  const categoryName = budget.categories?.name || 'Danh mục';
+
+  if (amount <= 0 || percentage < 80) return null;
+
+  if (percentage >= 100) {
+    return {
+      budget_id: budget.id,
+      alert_type: 'exceeded',
+      threshold_percent: 100,
+      message: `Ngân sách ${categoryName} đã vượt ${formatCurrency(Math.max(spent - amount, 0))}. Đã dùng ${percentage}% (${formatCurrency(spent)}/${formatCurrency(amount)}).`
+    };
+  }
+
+  if (percentage >= 90) {
+    return {
+      budget_id: budget.id,
+      alert_type: 'warning_90',
+      threshold_percent: 90,
+      message: `Ngân sách ${categoryName} đã dùng ${percentage}% (${formatCurrency(spent)}/${formatCurrency(amount)}). Bạn sắp chạm giới hạn.`
+    };
+  }
+
+  return {
+    budget_id: budget.id,
+    alert_type: 'warning_80',
+    threshold_percent: 80,
+    message: `Ngân sách ${categoryName} đã dùng ${percentage}% (${formatCurrency(spent)}/${formatCurrency(amount)}). Bạn nên theo dõi chi tiêu trong danh mục này.`
+  };
+};
+
+const syncBudgetAlerts = async (userId, budgetStatuses) => {
+  const alerts = budgetStatuses
+    .map(getBudgetAlert)
+    .filter(Boolean)
+    .map(alert => ({
+      ...alert,
+      user_id: userId,
+      is_read: false
+    }));
+
+  if (alerts.length === 0) return;
+
+  const budgetIds = [...new Set(alerts.map(alert => alert.budget_id))];
+  const { data: existingAlerts, error: existingError } = await supabase
+    .from('budget_alerts')
+    .select('budget_id, alert_type')
+    .eq('user_id', userId)
+    .in('budget_id', budgetIds);
+
+  if (existingError) {
+    console.error('Budget alerts lookup error:', existingError);
+    return;
+  }
+
+  const existingKeys = new Set(
+    (existingAlerts || []).map(alert => `${alert.budget_id}:${alert.alert_type}`)
+  );
+
+  const alertsToInsert = alerts.filter(
+    alert => !existingKeys.has(`${alert.budget_id}:${alert.alert_type}`)
+  );
+
+  if (alertsToInsert.length === 0) return;
+
+  const { error: insertError } = await supabase
+    .from('budget_alerts')
+    .insert(alertsToInsert);
+
+  if (insertError) {
+    console.error('Budget alerts insert error:', insertError);
+  }
+};
+
 exports.getSummary = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
@@ -140,12 +220,19 @@ exports.getBudgetStatus = async (req, res) => {
       return acc;
     }, {});
 
-    const result = budgets.map(b => ({
-      ...b,
-      spent: spending[b.category_id] || 0,
-      remaining: b.amount - (spending[b.category_id] || 0),
-      percentage: Math.round(((spending[b.category_id] || 0) / b.amount) * 100)
-    }));
+    const result = budgets.map(b => {
+      const amount = Number(b.amount) || 0;
+      const spent = spending[b.category_id] || 0;
+
+      return {
+        ...b,
+        spent,
+        remaining: amount - spent,
+        percentage: amount > 0 ? Math.round((spent / amount) * 100) : 0
+      };
+    });
+
+    await syncBudgetAlerts(userId, result);
 
     res.json(result);
   } catch (error) {

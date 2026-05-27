@@ -5,7 +5,7 @@ import 'env.dart';
 class ApiService {
   late Dio _dio;
   bool _isReconnecting = false;
-  
+
   // Cache để giảm request
   final Map<String, _CacheEntry> _cache = {};
   static const _cacheDuration = Duration(seconds: 30);
@@ -27,7 +27,7 @@ class ApiService {
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         options.baseUrl = Env.apiUrl;
-        
+
         final session = Supabase.instance.client.auth.currentSession;
         if (session != null) {
           options.headers['Authorization'] = 'Bearer ${session.accessToken}';
@@ -35,16 +35,17 @@ class ApiService {
         } else {
           print('❌ No session found! User not logged in?');
         }
-        print('📡 Request: ${options.method} ${options.baseUrl}${options.path}');
+        print(
+            '📡 Request: ${options.method} ${options.baseUrl}${options.path}');
         return handler.next(options);
       },
       onError: (error, handler) async {
         if (_shouldReconnect(error) && !_isReconnecting) {
           _isReconnecting = true;
-          
+
           final success = await Env.reconnect();
           _isReconnecting = false;
-          
+
           if (success) {
             try {
               final opts = error.requestOptions;
@@ -56,7 +57,7 @@ class ApiService {
             }
           }
         }
-        
+
         return handler.next(error);
       },
     ));
@@ -64,14 +65,15 @@ class ApiService {
 
   bool _shouldReconnect(DioException error) {
     return error.type == DioExceptionType.connectionTimeout ||
-           error.type == DioExceptionType.connectionError ||
-           error.type == DioExceptionType.receiveTimeout;
+        error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.receiveTimeout;
   }
 
   // Cache helper
   T? _getFromCache<T>(String key) {
     final entry = _cache[key];
-    if (entry != null && DateTime.now().difference(entry.timestamp) < _cacheDuration) {
+    if (entry != null &&
+        DateTime.now().difference(entry.timestamp) < _cacheDuration) {
       return entry.data as T;
     }
     _cache.remove(key);
@@ -101,7 +103,8 @@ class ApiService {
       if (e.response?.statusCode == 401) {
         throw Exception('Phiên đăng nhập hết hạn.');
       }
-      throw Exception(e.response?.data?['error'] ?? e.message ?? 'Lỗi không xác định');
+      throw Exception(
+          e.response?.data?['error'] ?? e.message ?? 'Lỗi không xác định');
     }
   }
 
@@ -112,7 +115,7 @@ class ApiService {
       final cached = _getFromCache<List<dynamic>>(cacheKey);
       if (cached != null) return cached;
     }
-    
+
     return _safeRequest(() async {
       final response = await _dio.get('/transactions');
       final data = response.data as List<dynamic>;
@@ -121,7 +124,8 @@ class ApiService {
     });
   }
 
-  Future<Map<String, dynamic>> createTransaction(Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> createTransaction(
+      Map<String, dynamic> data) async {
     clearCache(); // Clear cache khi tạo mới
     return _safeRequest(() async {
       final response = await _dio.post('/transactions', data: data);
@@ -136,7 +140,7 @@ class ApiService {
       final cached = _getFromCache<List<dynamic>>(cacheKey);
       if (cached != null) return cached;
     }
-    
+
     return _safeRequest(() async {
       final response = await _dio.get('/categories');
       final data = response.data as List<dynamic>;
@@ -151,10 +155,7 @@ class ApiService {
       // Increase timeout for OCR (Gemini can be slow)
       final response = await _dio.post(
         '/ocr/analyze-base64',
-        data: {
-          'image': base64Image,
-          'mimeType': 'image/jpeg'
-        },
+        data: {'image': base64Image, 'mimeType': 'image/jpeg'},
         options: Options(
           sendTimeout: const Duration(seconds: 60),
           receiveTimeout: const Duration(seconds: 60),
@@ -179,7 +180,7 @@ class ApiService {
       final cached = _getFromCache<Map<String, dynamic>>(cacheKey);
       if (cached != null) return cached;
     }
-    
+
     return _safeRequest(() async {
       final response = await _dio.get('/reports/summary');
       final data = response.data as Map<String, dynamic>;
@@ -202,15 +203,18 @@ class ApiService {
     });
   }
 
-  Future<List<dynamic>> getBudgetStatus({required int year, required int month}) async {
+  Future<List<dynamic>> getBudgetStatus(
+      {required int year, required int month}) async {
     return _safeRequest(() async {
-      final response = await _dio.get('/reports/budget-status?year=$year&month=$month');
+      final response =
+          await _dio.get('/reports/budget-status?year=$year&month=$month');
       return response.data;
     });
   }
 
   // ============ BUDGETS ============
-  Future<List<dynamic>> getBudgets({required int year, required int month}) async {
+  Future<List<dynamic>> getBudgets(
+      {required int year, required int month}) async {
     return _safeRequest(() async {
       final response = await _dio.get('/budgets?year=$year&month=$month');
       return response.data;
@@ -224,7 +228,8 @@ class ApiService {
     });
   }
 
-  Future<Map<String, dynamic>> updateBudget(String id, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> updateBudget(
+      String id, Map<String, dynamic> data) async {
     return _safeRequest(() async {
       final response = await _dio.put('/budgets/$id', data: data);
       return response.data;
@@ -267,9 +272,12 @@ class ApiService {
     });
   }
 
-  Future<Map<String, dynamic>> getInsights() async {
+  Future<Map<String, dynamic>> getInsights({bool forceRefresh = false}) async {
     return _safeRequest(() async {
-      final response = await _dio.get('/analytics/insights');
+      final response = await _dio.get(
+        '/analytics/insights',
+        queryParameters: forceRefresh ? {'forceRefresh': 'true'} : null,
+      );
       return response.data;
     });
   }
@@ -296,7 +304,8 @@ class ApiService {
     });
   }
 
-  Future<Map<String, dynamic>> updateGoal(String id, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> updateGoal(
+      String id, Map<String, dynamic> data) async {
     return _safeRequest(() async {
       final response = await _dio.put('/goals/$id', data: data);
       return response.data;
@@ -309,7 +318,8 @@ class ApiService {
     });
   }
 
-  Future<Map<String, dynamic>> contributeToGoal(String goalId, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> contributeToGoal(
+      String goalId, Map<String, dynamic> data) async {
     return _safeRequest(() async {
       final response = await _dio.post('/goals/$goalId/contribute', data: data);
       return response.data;
@@ -331,14 +341,16 @@ class ApiService {
     });
   }
 
-  Future<Map<String, dynamic>> createRecurring(Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> createRecurring(
+      Map<String, dynamic> data) async {
     return _safeRequest(() async {
       final response = await _dio.post('/recurring', data: data);
       return response.data;
     });
   }
 
-  Future<Map<String, dynamic>> updateRecurring(String id, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> updateRecurring(
+      String id, Map<String, dynamic> data) async {
     return _safeRequest(() async {
       final response = await _dio.put('/recurring/$id', data: data);
       return response.data;
@@ -359,7 +371,8 @@ class ApiService {
   }
 
   // ============ SMART ANALYSIS ============
-  Future<Map<String, dynamic>> getSmartAnalysis({String period = 'month'}) async {
+  Future<Map<String, dynamic>> getSmartAnalysis(
+      {String period = 'month'}) async {
     return _safeRequest(() async {
       final response = await _dio.get('/smart/analysis?period=$period');
       return response.data;
@@ -388,17 +401,24 @@ class ApiService {
   }
 
   // ============ VOICE INPUT ============
+  Future<Map<String, dynamic>> parseTransactionText(String text) async {
+    return parseVoiceTransaction(text);
+  }
+
   Future<Map<String, dynamic>> parseVoiceTransaction(String text) async {
     return _safeRequest(() async {
-      final response = await _dio.post('/transactions/parse-voice', data: {'text': text});
+      final response =
+          await _dio.post('/transactions/parse-voice', data: {'text': text});
       return response.data;
     });
   }
 
   // ============ SMS BANKING ============
-  Future<List<dynamic>> parseBankingSms(List<Map<String, dynamic>> messages) async {
+  Future<List<dynamic>> parseBankingSms(
+      List<Map<String, dynamic>> messages) async {
     return _safeRequest(() async {
-      final response = await _dio.post('/transactions/parse-sms', data: {'messages': messages});
+      final response = await _dio
+          .post('/transactions/parse-sms', data: {'messages': messages});
       return response.data;
     });
   }

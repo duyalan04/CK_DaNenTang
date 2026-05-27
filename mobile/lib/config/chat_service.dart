@@ -27,10 +27,8 @@ class ChatService {
 
   static String? _conversationId;
 
-  /// Gửi tin nhắn và nhận phản hồi từ AI
   static Future<ChatResponse> sendMessage(String message, {String? authToken}) async {
     try {
-      // Cập nhật baseUrl mỗi lần gọi
       _dio.options.baseUrl = Env.apiUrl;
       
       final headers = <String, String>{};
@@ -61,23 +59,22 @@ class ChatService {
       String errorMsg;
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout) {
-        errorMsg = '⏱️ Kết nối quá lâu. Server có thể đang bận, vui lòng thử lại sau.';
+        errorMsg = 'Kết nối quá lâu. Server có thể đang bận, vui lòng thử lại sau.';
       } else if (e.response?.statusCode == 401) {
-        errorMsg = '🔑 API key không hợp lệ. Vui lòng kiểm tra cấu hình.';
+        errorMsg = 'API key không hợp lệ. Vui lòng kiểm tra cấu hình.';
       } else if (e.response?.statusCode == 429) {
-        errorMsg = '⚠️ Đã vượt quá giới hạn request. Vui lòng thử lại sau ít phút.';
+        errorMsg = 'Đã vượt quá giới hạn request. Vui lòng thử lại sau ít phút.';
       } else if (e.response?.statusCode == 500) {
-        errorMsg = '❌ Lỗi server. Vui lòng thử lại sau.';
+        errorMsg = 'Lỗi server. Vui lòng thử lại sau.';
       } else {
-        errorMsg = '🔌 Lỗi kết nối: Không thể kết nối đến server.';
+        errorMsg = 'Lỗi kết nối: Không thể kết nối đến server.';
       }
       return ChatResponse(message: errorMsg);
     } catch (e) {
-      return ChatResponse(message: '❌ Có lỗi xảy ra: $e');
+      return ChatResponse(message: 'Có lỗi xảy ra: $e');
     }
   }
 
-  /// Xóa history conversation
   static Future<void> clearHistory() async {
     try {
       _dio.options.baseUrl = Env.apiUrl;

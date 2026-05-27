@@ -1,83 +1,63 @@
 import { useQuery } from '@tanstack/react-query'
-import { PiggyBank, TrendingDown, ChevronRight, Sparkles } from 'lucide-react'
+import { PiggyBank, TrendingDown, ArrowDownRight, Sparkles, RefreshCw, Target } from 'lucide-react'
 import api from '../lib/api'
 
-const formatCurrency = (value) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value)
+const formatCurrency = (value) =>
+    new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value)
+
+const formatShortCurrency = (value) => {
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1).replace('.0', '')}tr`
+    if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
+    return value.toString()
 }
 
-// Progress bar cho mức độ priority
-const PriorityBar = ({ priority }) => {
-    const width = ((4 - priority) / 3) * 100
+const PriorityDot = ({ priority }) => (
+    <span className={`inline-block w-2 h-2 rounded-full ${priority === 1 ? 'bg-red-400' : priority === 2 ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+)
 
-    return (
-        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-            <div
-                className={`h-full transition-all duration-300 ${priority === 1 ? 'bg-red-500' :
-                        priority === 2 ? 'bg-orange-500' :
-                            'bg-yellow-500'
-                    }`}
-                style={{ width: `${width}%` }}
-            />
-        </div>
-    )
-}
-
-// Single Recommendation Item
-const RecommendationItem = ({ recommendation }) => {
+const RecommendationItem = ({ recommendation, index }) => {
     const { category, currentMonthlySpending, suggestedReduction, potentialYearlySavings, tip, priority } = recommendation
+    const monthlySaving = potentialYearlySavings / 12
 
     return (
-        <div className="p-4 bg-white rounded-lg border border-gray-100 hover:border-green-200 hover:shadow-sm transition-all">
+        <div className="group relative p-4 rounded-xl border border-gray-100 hover:border-emerald-200 hover:bg-emerald-50/30 transition-all duration-200">
             <div className="flex items-start gap-3">
-                {/* Category Icon */}
+                {/* Icon */}
                 <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-lg"
-                    style={{ backgroundColor: category?.color + '20' || '#e5e7eb' }}
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0"
+                    style={{ backgroundColor: (category?.color || '#9ca3af') + '15' }}
                 >
                     {category?.icon || '📦'}
                 </div>
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-medium text-gray-800">
-                            {category?.name || 'Không xác định'}
-                        </h4>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${priority === 1 ? 'bg-red-100 text-red-700' :
-                                priority === 2 ? 'bg-orange-100 text-orange-700' :
-                                    'bg-yellow-100 text-yellow-700'
-                            }`}>
-                            {priority === 1 ? 'Ưu tiên cao' : priority === 2 ? 'Quan trọng' : 'Gợi ý'}
+                    <div className="flex items-center gap-2 mb-1">
+                        <PriorityDot priority={priority} />
+                        <h4 className="font-semibold text-gray-800 text-[15px]">{category?.name || 'Không xác định'}</h4>
+                    </div>
+
+                    {/* Spending → Target flow */}
+                    <div className="flex items-center gap-2 text-sm mb-2">
+                        <span className="text-gray-500">{formatShortCurrency(currentMonthlySpending)}/th</span>
+                        <ArrowDownRight className="w-3.5 h-3.5 text-emerald-500" />
+                        <span className="font-semibold text-emerald-600">
+                            {formatShortCurrency(currentMonthlySpending * (1 - suggestedReduction / 100))}/th
                         </span>
+                        <span className="text-xs text-gray-400">(-{suggestedReduction}%)</span>
                     </div>
 
-                    <PriorityBar priority={priority} />
+                    {/* Tip */}
+                    {tip && (
+                        <p className="text-xs text-gray-400 leading-relaxed line-clamp-2">{tip}</p>
+                    )}
+                </div>
 
-                    <div className="mt-2 flex items-center gap-4 text-sm">
-                        <div>
-                            <span className="text-gray-500">Hiện tại:</span>
-                            <span className="ml-1 font-medium text-gray-700">
-                                {formatCurrency(currentMonthlySpending)}/tháng
-                            </span>
-                        </div>
-                        <div className="flex items-center text-green-600">
-                            <TrendingDown className="w-4 h-4 mr-1" />
-                            <span>Giảm {suggestedReduction}%</span>
-                        </div>
-                    </div>
-
-                    <p className="mt-2 text-sm text-gray-500 italic">
-                        {tip}
-                    </p>
-
-                    <div className="mt-2 p-2 bg-green-50 rounded-md">
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600">Tiết kiệm tiềm năng:</span>
-                            <span className="font-bold text-green-600">
-                                {formatCurrency(potentialYearlySavings)}/năm
-                            </span>
-                        </div>
+                {/* Savings badge */}
+                <div className="shrink-0 text-right">
+                    <div className="px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-100">
+                        <p className="text-[11px] text-emerald-500 font-medium">Tiết kiệm</p>
+                        <p className="text-sm font-bold text-emerald-600">{formatShortCurrency(monthlySaving)}/th</p>
                     </div>
                 </div>
             </div>
@@ -86,7 +66,7 @@ const RecommendationItem = ({ recommendation }) => {
 }
 
 export default function SavingsCard() {
-    const { data, isLoading, error } = useQuery({
+    const { data, isLoading, error, refetch } = useQuery({
         queryKey: ['savings'],
         queryFn: () => api.get('/analytics/savings').then(res => res.data),
         staleTime: 300000
@@ -94,11 +74,12 @@ export default function SavingsCard() {
 
     if (isLoading) {
         return (
-            <div className="bg-white p-6 rounded-xl shadow-sm animate-pulse">
-                <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
-                <div className="space-y-4">
-                    <div className="h-24 bg-gray-100 rounded-lg"></div>
-                    <div className="h-24 bg-gray-100 rounded-lg"></div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm animate-pulse">
+                <div className="h-5 bg-gray-100 rounded w-1/3 mb-4"></div>
+                <div className="h-20 bg-gray-50 rounded-xl mb-3"></div>
+                <div className="space-y-3">
+                    <div className="h-16 bg-gray-50 rounded-xl"></div>
+                    <div className="h-16 bg-gray-50 rounded-xl"></div>
                 </div>
             </div>
         )
@@ -106,8 +87,9 @@ export default function SavingsCard() {
 
     if (error || !data?.success) {
         return (
-            <div className="bg-white p-6 rounded-xl shadow-sm">
-                <p className="text-gray-500 text-center">Không thể tải gợi ý tiết kiệm</p>
+            <div className="bg-white p-6 rounded-2xl shadow-sm text-center">
+                <PiggyBank className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                <p className="text-gray-400 text-sm">Không thể tải gợi ý tiết kiệm</p>
             </div>
         )
     }
@@ -116,57 +98,75 @@ export default function SavingsCard() {
 
     if (recommendations.length === 0) {
         return (
-            <div className="bg-white p-6 rounded-xl shadow-sm">
-                <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                    <PiggyBank className="w-5 h-5 text-green-600" />
+            <div className="bg-white p-6 rounded-2xl shadow-sm">
+                <h2 className="text-base font-bold text-gray-800 flex items-center gap-2 mb-4">
+                    <PiggyBank className="w-5 h-5 text-emerald-500" />
                     Gợi ý tiết kiệm
                 </h2>
                 <div className="text-center py-6">
-                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <Sparkles className="w-8 h-8 text-green-500" />
+                    <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                        <Sparkles className="w-7 h-7 text-emerald-400" />
                     </div>
-                    <p className="text-gray-600">Chi tiêu của bạn đang hợp lý!</p>
-                    <p className="text-sm text-gray-400 mt-1">Chưa cần điều chỉnh</p>
+                    <p className="text-sm text-gray-600 font-medium">Chi tiêu hợp lý!</p>
+                    <p className="text-xs text-gray-400 mt-1">Chưa cần điều chỉnh</p>
                 </div>
             </div>
         )
     }
 
+    const monthlySaving = summary.totalPotentialYearlySavings / 12
+
     return (
-        <div className="bg-white p-6 rounded-xl shadow-sm">
+        <div className="bg-white p-5 rounded-2xl shadow-sm">
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                    <PiggyBank className="w-5 h-5 text-green-600" />
-                    Gợi ý tiết kiệm
+                <h2 className="text-base font-bold text-gray-800 flex items-center gap-2">
+                    <PiggyBank className="w-5 h-5 text-emerald-500" />
+                    Cơ hội tiết kiệm
                 </h2>
-                <span className="text-sm text-gray-500">
-                    {recommendations.length} gợi ý
-                </span>
+                <button onClick={() => refetch()} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="Làm mới">
+                    <RefreshCw className="w-3.5 h-3.5 text-gray-400" />
+                </button>
             </div>
 
-            {/* Total Potential Savings */}
-            <div className="mb-4 p-4 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg text-white">
+            {/* Summary - cleaner */}
+            <div className="mb-4 p-4 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl text-white">
                 <div className="flex items-center justify-between">
                     <div>
-                        <p className="text-sm text-green-100">Tiềm năng tiết kiệm/năm</p>
-                        <p className="text-2xl font-bold">{formatCurrency(summary.totalPotentialYearlySavings)}</p>
+                        <p className="text-emerald-100 text-xs font-medium mb-0.5">Bạn có thể tiết kiệm mỗi tháng</p>
+                        <p className="text-2xl font-black tracking-tight">{formatCurrency(monthlySaving)}</p>
+                        <p className="text-emerald-200 text-[11px] mt-1">≈ {formatCurrency(summary.totalPotentialYearlySavings)}/năm</p>
                     </div>
-                    <PiggyBank className="w-12 h-12 text-green-200" />
+                    <div className="w-12 h-12 bg-white/15 rounded-2xl flex items-center justify-center">
+                        <Target className="w-6 h-6 text-white" />
+                    </div>
                 </div>
             </div>
 
-            {/* Recommendations List */}
-            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+            {/* Legend */}
+            <div className="flex items-center gap-4 mb-3 px-1">
+                <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
+                    <span className="w-2 h-2 rounded-full bg-red-400" /> Ưu tiên cao
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
+                    <span className="w-2 h-2 rounded-full bg-amber-400" /> Quan trọng
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" /> Gợi ý
+                </div>
+            </div>
+
+            {/* Recommendations */}
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
                 {recommendations.map((rec, index) => (
-                    <RecommendationItem key={index} recommendation={rec} />
+                    <RecommendationItem key={index} recommendation={rec} index={index} />
                 ))}
             </div>
 
             {/* Footer */}
-            <div className="mt-4 pt-3 border-t border-gray-100 text-center">
-                <p className="text-xs text-gray-400">
-                    Chi tiêu trung bình: {formatCurrency(summary.totalMonthlyExpense)}/tháng
+            <div className="mt-3 pt-3 border-t border-gray-50 text-center">
+                <p className="text-[11px] text-gray-300">
+                    Dựa trên chi tiêu TB {formatCurrency(summary.totalMonthlyExpense)}/tháng
                 </p>
             </div>
         </div>

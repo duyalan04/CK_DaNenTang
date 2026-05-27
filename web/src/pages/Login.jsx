@@ -1,6 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { Eye, EyeOff, Mail, Lock, User, Sparkles, ArrowRight } from 'lucide-react'
+import {
+  ArrowRight,
+  BarChart3,
+  Check,
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  ShieldCheck,
+  User
+} from 'lucide-react'
 import { useToast } from '../components/Toast'
 
 export default function Login() {
@@ -11,12 +21,11 @@ export default function Login() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [loading, setLoading] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
 
-  // Validation states
   const [touched, setTouched] = useState({
     email: false,
     password: false,
@@ -24,7 +33,6 @@ export default function Login() {
     fullName: false
   })
 
-  // Password validation
   const passwordChecks = {
     length: password.length >= 8,
     hasLetter: /[a-zA-Z]/.test(password),
@@ -33,27 +41,17 @@ export default function Login() {
   const isPasswordValid = passwordChecks.length && passwordChecks.hasLetter && passwordChecks.hasNumber
   const passwordsMatch = password === confirmPassword
 
-  // Mouse tracking for gradient effect
-  useEffect(() => {
-    const handleMouseMove = (e) => {
-      setMousePosition({ x: e.clientX, y: e.clientY })
-    }
-    window.addEventListener('mousemove', handleMouseMove)
-    return () => window.removeEventListener('mousemove', handleMouseMove)
-  }, [])
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
 
-    // Validation
     if (!isLogin) {
       if (!fullName.trim()) {
         setError('Vui lòng nhập họ tên')
         return
       }
       if (!isPasswordValid) {
-        setError('Mật khẩu chưa đủ mạnh')
+        setError('Mật khẩu cần tối thiểu 8 ký tự, có chữ cái và số')
         return
       }
       if (!passwordsMatch) {
@@ -89,23 +87,33 @@ export default function Login() {
         }
       }
     } catch (err) {
-      let errorMsg = err.message
-      if (err.message.includes('Invalid login credentials')) {
-        errorMsg = 'Email hoặc mật khẩu không đúng'
-      } else if (err.message.includes('User already registered')) {
-        errorMsg = 'Email này đã được đăng ký'
-      } else if (err.message.includes('Invalid email')) {
-        errorMsg = 'Email không hợp lệ'
-      } else if (err.message.includes('Email not confirmed')) {
-        errorMsg = 'Vui lòng xác nhận email trước khi đăng nhập. Kiểm tra hộp thư của bạn.'
-      } else if (err.message.includes('rate limit') || err.message.includes('429')) {
-        errorMsg = 'Quá nhiều yêu cầu. Vui lòng đợi 1 phút rồi thử lại.'
-      } else if (err.message.includes('Database error') || err.message.includes('saving new user')) {
-        errorMsg = 'Lỗi database khi tạo user. Vui lòng liên hệ admin.'
-      }
-      setError(errorMsg)
+      setError(getFriendlyAuthError(err))
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleForgotPassword = async () => {
+    setError('')
+
+    if (!email.trim()) {
+      setError('Nhập email trước để nhận link đặt lại mật khẩu')
+      return
+    }
+
+    setResetLoading(true)
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin
+      })
+
+      if (error) throw error
+      toast.success('Đã gửi link đặt lại mật khẩu vào email của bạn.')
+    } catch (err) {
+      setError(getFriendlyAuthError(err))
+    } finally {
+      setResetLoading(false)
     }
   }
 
@@ -114,7 +122,7 @@ export default function Login() {
   }
 
   const switchMode = () => {
-    setIsLogin(!isLogin)
+    setIsLogin(prev => !prev)
     setError('')
     setPassword('')
     setConfirmPassword('')
@@ -127,296 +135,315 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Animated gradient background */}
-      <div
-        className="fixed inset-0 transition-all duration-500 ease-out"
-        style={{
-          background: `
-            radial-gradient(circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(16, 185, 129, 0.15) 0%, transparent 50%),
-            linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)
-          `
-        }}
-      />
-
-      {/* Floating orbs */}
-      <div className="fixed top-20 left-20 w-72 h-72 bg-emerald-500/20 rounded-full blur-3xl animate-pulse" />
-      <div className="fixed bottom-20 right-20 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-      <div className="fixed top-1/2 left-1/3 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
-
-      {/* Grid pattern overlay */}
-      <div
-        className="fixed inset-0 opacity-[0.02]"
-        style={{
-          backgroundImage: `linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px)`,
-          backgroundSize: '50px 50px'
-        }}
-      />
-
-      {/* Main container */}
-      <div className="relative z-10 w-full max-w-md">
-        {/* Logo and branding */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-400 to-cyan-400 mb-4 shadow-lg shadow-emerald-500/25">
-            <Sparkles className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-white mb-2">
-            Expense Tracker
-          </h1>
-          <p className="text-slate-400">
-            {isLogin ? 'Chào mừng bạn quay lại!' : 'Bắt đầu quản lý tài chính của bạn'}
-          </p>
-        </div>
-
-        {/* Glass card */}
-        <div className="backdrop-blur-xl bg-white/[0.08] rounded-3xl p-8 shadow-2xl border border-white/10">
-          {/* Tab switcher */}
-          <div className="flex bg-white/5 rounded-xl p-1 mb-8">
-            <button
-              onClick={() => isLogin || switchMode()}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${isLogin
-                  ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white shadow-lg'
-                  : 'text-slate-400 hover:text-white'
-                }`}
-            >
-              Đăng nhập
-            </button>
-            <button
-              onClick={() => !isLogin || switchMode()}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${!isLogin
-                  ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white shadow-lg'
-                  : 'text-slate-400 hover:text-white'
-                }`}
-            >
-              Đăng ký
-            </button>
-          </div>
-
-          {/* Error message */}
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-xl mb-6 text-sm backdrop-blur-sm">
-              {error}
+    <main className="min-h-screen bg-slate-50 text-slate-950">
+      <div className="mx-auto grid min-h-screen w-full max-w-7xl grid-cols-1 lg:grid-cols-[1fr_480px]">
+        <section className="hidden border-r border-slate-200 bg-white px-12 py-10 lg:flex lg:flex-col">
+          <div className="flex items-center gap-3">
+            <img
+              src="/favicon.png"
+              alt="Expense Tracker"
+              className="h-16 w-auto object-contain"
+            />
+            <div className="sr-only">
+              <p>Expense Tracker</p>
+              <p className="text-sm text-slate-500">Quản lý tài chính cá nhân</p>
             </div>
-          )}
+          </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Full Name - Register only */}
-            {!isLogin && (
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-300">
-                  Họ và tên
-                </label>
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <User className="w-5 h-5 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
+          <div className="flex flex-1 items-center">
+            <div className="max-w-xl">
+              <p className="mb-4 text-sm font-semibold uppercase tracking-wider text-emerald-700">
+                Private finance workspace
+              </p>
+              <h1 className="text-5xl font-semibold leading-tight tracking-normal text-slate-950">
+                Theo dõi thu chi rõ ràng, quyết định tiền bạc chắc hơn.
+              </h1>
+              <p className="mt-5 max-w-lg text-lg leading-8 text-slate-600">
+                Một nơi gọn gàng để xem số dư, kiểm soát ngân sách và hiểu thói quen chi tiêu của bạn qua từng tháng.
+              </p>
+
+              <div className="mt-10 grid grid-cols-3 gap-3">
+                <MetricCard label="Thu nhập" value="2.000.000 đ" tone="green" />
+                <MetricCard label="Chi tiêu" value="1.430.000 đ" tone="red" />
+                <MetricCard label="Còn lại" value="570.000 đ" tone="blue" />
+              </div>
+
+              <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Sức khỏe tài chính</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-950">Grade A</p>
                   </div>
-                  <input
-                    type="text"
-                    placeholder="Nguyễn Văn A"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    onBlur={() => handleBlur('fullName')}
-                    className={`w-full pl-12 pr-4 py-3.5 bg-white/5 border rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all duration-300 ${touched.fullName && !fullName.trim()
-                        ? 'border-red-500/50'
-                        : 'border-white/10 hover:border-white/20'
-                      }`}
-                    required={!isLogin}
-                  />
+                  <BarChart3 className="h-7 w-7 text-emerald-700" />
                 </div>
-              </div>
-            )}
-
-            {/* Email */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-300">
-                Email
-              </label>
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Mail className="w-5 h-5 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
+                <div className="h-2 rounded-full bg-slate-200">
+                  <div className="h-2 w-4/5 rounded-full bg-emerald-600" />
                 </div>
-                <input
-                  type="email"
-                  placeholder="email@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onBlur={() => handleBlur('email')}
-                  className="w-full pl-12 pr-4 py-3.5 bg-white/5 border border-white/10 hover:border-white/20 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all duration-300"
-                  required
-                />
+                <p className="mt-3 text-sm text-slate-500">
+                  Dữ liệu được trình bày đơn giản để bạn nhìn ra vấn đề nhanh, không bị nhiễu bởi hiệu ứng trang trí.
+                </p>
               </div>
             </div>
+          </div>
 
-            {/* Password */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-300">
-                Mật khẩu
-              </label>
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Lock className="w-5 h-5 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
-                </div>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onBlur={() => handleBlur('password')}
-                  className={`w-full pl-12 pr-12 py-3.5 bg-white/5 border rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all duration-300 ${touched.password && !isLogin && !isPasswordValid
-                      ? 'border-red-500/50'
-                      : 'border-white/10 hover:border-white/20'
-                    }`}
-                  required
-                />
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <ShieldCheck className="h-4 w-4 text-emerald-700" />
+            Dữ liệu đăng nhập được xử lý qua Supabase Authentication.
+          </div>
+        </section>
+
+        <section className="flex min-h-screen items-center justify-center px-5 py-8 sm:px-8">
+          <div className="w-full max-w-md">
+            <div className="mb-8 lg:hidden">
+              <img
+                src="/favicon.png"
+                alt="Expense Tracker"
+                className="mb-4 h-16 w-auto object-contain"
+              />
+              <p className="mt-1 text-sm text-slate-500">Quản lý tài chính cá nhân</p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+              <div className="mb-7">
+                <p className="text-sm font-medium text-slate-500">
+                  {isLogin ? 'Chào mừng bạn quay lại' : 'Tạo tài khoản mới'}
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">
+                  {isLogin ? 'Đăng nhập' : 'Đăng ký'}
+                </h2>
+              </div>
+
+              <div className="mb-6 grid grid-cols-2 rounded-lg bg-slate-100 p-1">
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                  onClick={() => !isLogin && switchMode()}
+                  className={`h-10 rounded-md text-sm font-medium transition-colors ${isLogin
+                    ? 'bg-white text-slate-950 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-900'
+                  }`}
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  Đăng nhập
+                </button>
+                <button
+                  type="button"
+                  onClick={() => isLogin && switchMode()}
+                  className={`h-10 rounded-md text-sm font-medium transition-colors ${!isLogin
+                    ? 'bg-white text-slate-950 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Đăng ký
                 </button>
               </div>
 
-              {/* Password requirements - Register only */}
-              {!isLogin && touched.password && (
-                <div className="mt-3 space-y-2 p-3 bg-white/5 rounded-lg">
-                  <PasswordCheck passed={passwordChecks.length} text="Ít nhất 8 ký tự" />
-                  <PasswordCheck passed={passwordChecks.hasLetter} text="Có chữ cái" />
-                  <PasswordCheck passed={passwordChecks.hasNumber} text="Có số" />
+              {error && (
+                <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {error}
                 </div>
               )}
-            </div>
 
-            {/* Confirm Password - Register only */}
-            {!isLogin && (
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-300">
-                  Nhập lại mật khẩu
-                </label>
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Lock className="w-5 h-5 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
-                  </div>
-                  <input
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    onBlur={() => handleBlur('confirmPassword')}
-                    className={`w-full pl-12 pr-12 py-3.5 bg-white/5 border rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all duration-300 ${touched.confirmPassword && confirmPassword && !passwordsMatch
-                        ? 'border-red-500/50'
-                        : touched.confirmPassword && passwordsMatch && confirmPassword
-                          ? 'border-emerald-500/50'
-                          : 'border-white/10 hover:border-white/20'
-                      }`}
-                    required={!isLogin}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                  >
-                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-                {touched.confirmPassword && confirmPassword && (
-                  <p className={`text-sm ${passwordsMatch ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {passwordsMatch ? '✓ Mật khẩu khớp' : '✗ Mật khẩu không khớp'}
-                  </p>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {!isLogin && (
+                  <Field label="Họ và tên" error={touched.fullName && !fullName.trim()}>
+                    <User className="h-5 w-5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Nguyễn Văn A"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      onBlur={() => handleBlur('fullName')}
+                      className="min-w-0 flex-1 bg-transparent text-sm text-slate-950 outline-none placeholder:text-slate-400"
+                      required={!isLogin}
+                    />
+                  </Field>
                 )}
-              </div>
-            )}
 
-            {/* Forgot password - Login only */}
-            {isLogin && (
-              <div className="text-right">
-                <button type="button" className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
-                  Quên mật khẩu?
-                </button>
-              </div>
-            )}
+                <Field label="Email">
+                  <Mail className="h-5 w-5 text-slate-400" />
+                  <input
+                    type="email"
+                    placeholder="email@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    onBlur={() => handleBlur('email')}
+                    className="min-w-0 flex-1 bg-transparent text-sm text-slate-950 outline-none placeholder:text-slate-400"
+                    required
+                  />
+                </Field>
 
-            {/* Submit button */}
-            <button
-              type="submit"
-              disabled={loading || (!isLogin && (!isPasswordValid || !passwordsMatch))}
-              className="relative w-full py-4 rounded-xl font-medium text-white overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
-            >
-              {/* Button gradient background */}
-              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 via-cyan-500 to-emerald-500 bg-[length:200%_100%] group-hover:animate-shimmer transition-all" />
+                <Field label="Mật khẩu" error={touched.password && !isLogin && !isPasswordValid}>
+                  <Lock className="h-5 w-5 text-slate-400" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Nhập mật khẩu"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onBlur={() => handleBlur('password')}
+                    className="min-w-0 flex-1 bg-transparent text-sm text-slate-950 outline-none placeholder:text-slate-400"
+                    required
+                  />
+                  <PasswordToggle
+                    active={showPassword}
+                    onClick={() => setShowPassword(prev => !prev)}
+                  />
+                </Field>
 
-              {/* Button content */}
-              <span className="relative flex items-center justify-center gap-2">
-                {loading ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
+                {!isLogin && touched.password && (
+                  <div className="grid gap-2 rounded-lg bg-slate-50 p-3">
+                    <PasswordCheck passed={passwordChecks.length} text="Ít nhất 8 ký tự" />
+                    <PasswordCheck passed={passwordChecks.hasLetter} text="Có chữ cái" />
+                    <PasswordCheck passed={passwordChecks.hasNumber} text="Có số" />
+                  </div>
+                )}
+
+                {!isLogin && (
                   <>
-                    {isLogin ? 'Đăng nhập' : 'Tạo tài khoản'}
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                    <Field
+                      label="Nhập lại mật khẩu"
+                      error={touched.confirmPassword && confirmPassword && !passwordsMatch}
+                      success={touched.confirmPassword && confirmPassword && passwordsMatch}
+                    >
+                      <Lock className="h-5 w-5 text-slate-400" />
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        placeholder="Nhập lại mật khẩu"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        onBlur={() => handleBlur('confirmPassword')}
+                        className="min-w-0 flex-1 bg-transparent text-sm text-slate-950 outline-none placeholder:text-slate-400"
+                        required={!isLogin}
+                      />
+                      <PasswordToggle
+                        active={showConfirmPassword}
+                        onClick={() => setShowConfirmPassword(prev => !prev)}
+                      />
+                    </Field>
+
+                    {touched.confirmPassword && confirmPassword && (
+                      <p className={`text-sm ${passwordsMatch ? 'text-emerald-700' : 'text-red-600'}`}>
+                        {passwordsMatch ? 'Mật khẩu đã khớp' : 'Mật khẩu không khớp'}
+                      </p>
+                    )}
                   </>
                 )}
-              </span>
-            </button>
-          </form>
 
-          {/* Divider */}
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/10" />
+                {isLogin && (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleForgotPassword}
+                      disabled={resetLoading}
+                      className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {resetLoading ? 'Đang gửi...' : 'Quên mật khẩu?'}
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading || (!isLogin && (!isPasswordValid || !passwordsMatch))}
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading ? (
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  ) : (
+                    <>
+                      {isLogin ? 'Đăng nhập' : 'Tạo tài khoản'}
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
+                </button>
+              </form>
             </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-transparent text-slate-500">hoặc</span>
-            </div>
-          </div>
 
-          {/* Social login buttons */}
-          <div className="grid grid-cols-2 gap-4">
-            <button className="flex items-center justify-center gap-2 py-3 bg-white/5 border border-white/10 rounded-xl text-slate-300 hover:bg-white/10 hover:border-white/20 transition-all duration-300">
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-              </svg>
-              <span>Google</span>
-            </button>
-            <button className="flex items-center justify-center gap-2 py-3 bg-white/5 border border-white/10 rounded-xl text-slate-300 hover:bg-white/10 hover:border-white/20 transition-all duration-300">
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z" />
-              </svg>
-              <span>GitHub</span>
-            </button>
+            <p className="mt-6 text-center text-sm leading-6 text-slate-500">
+              Bằng việc tiếp tục, bạn đồng ý với điều khoản sử dụng và chính sách bảo mật của Expense Tracker.
+            </p>
           </div>
-        </div>
-
-        {/* Footer */}
-        <p className="text-center text-slate-500 text-sm mt-8">
-          Bằng việc tiếp tục, bạn đồng ý với{' '}
-          <a href="#" className="text-emerald-400 hover:text-emerald-300 transition-colors">Điều khoản sử dụng</a>
-        </p>
+        </section>
       </div>
+    </main>
+  )
+}
 
-      {/* CSS for shimmer animation */}
-      <style>{`
-        @keyframes shimmer {
-          0% { background-position: 200% 0; }
-          100% { background-position: -200% 0; }
-        }
-        .animate-shimmer {
-          animation: shimmer 3s linear infinite;
-        }
-      `}</style>
-    </div>
+function Field({ label, error, success, children }) {
+  const borderClass = error
+    ? 'border-red-300 ring-1 ring-red-100'
+    : success
+      ? 'border-emerald-300 ring-1 ring-emerald-100'
+      : 'border-slate-300 focus-within:border-slate-900'
+
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-slate-700">{label}</span>
+      <div className={`flex h-12 items-center gap-3 rounded-lg border bg-white px-3 transition-colors ${borderClass}`}>
+        {children}
+      </div>
+    </label>
+  )
+}
+
+function PasswordToggle({ active, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+      aria-label={active ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+    >
+      {active ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+    </button>
   )
 }
 
 function PasswordCheck({ passed, text }) {
   return (
-    <div className={`flex items-center gap-2 text-sm transition-colors ${passed ? 'text-emerald-400' : 'text-slate-500'}`}>
-      <div className={`w-4 h-4 rounded-full flex items-center justify-center text-xs ${passed ? 'bg-emerald-500/20' : 'bg-white/5'}`}>
-        {passed ? '✓' : '○'}
-      </div>
+    <div className={`flex items-center gap-2 text-sm ${passed ? 'text-emerald-700' : 'text-slate-500'}`}>
+      <span className={`flex h-4 w-4 items-center justify-center rounded-full border ${passed ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300'}`}>
+        {passed && <Check className="h-3 w-3" />}
+      </span>
       {text}
     </div>
   )
+}
+
+function MetricCard({ label, value, tone }) {
+  const toneClass = {
+    green: 'text-emerald-700',
+    red: 'text-red-700',
+    blue: 'text-blue-700'
+  }[tone]
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className={`mt-2 text-lg font-semibold ${toneClass}`}>{value}</p>
+    </div>
+  )
+}
+
+function getFriendlyAuthError(err) {
+  const message = err?.message || 'Đã có lỗi xảy ra'
+
+  if (message.includes('Invalid login credentials')) {
+    return 'Email hoặc mật khẩu không đúng'
+  }
+  if (message.includes('User already registered')) {
+    return 'Email này đã được đăng ký'
+  }
+  if (message.includes('Invalid email')) {
+    return 'Email không hợp lệ'
+  }
+  if (message.includes('Email not confirmed')) {
+    return 'Vui lòng xác nhận email trước khi đăng nhập. Kiểm tra hộp thư của bạn.'
+  }
+  if (message.includes('rate limit') || message.includes('429')) {
+    return 'Quá nhiều yêu cầu. Vui lòng đợi 1 phút rồi thử lại.'
+  }
+  if (message.includes('Database error') || message.includes('saving new user')) {
+    return 'Lỗi database khi tạo user. Vui lòng liên hệ admin.'
+  }
+
+  return message
 }

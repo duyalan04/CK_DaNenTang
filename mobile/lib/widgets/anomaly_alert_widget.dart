@@ -22,12 +22,14 @@ class _AnomalyAlertWidgetState extends State<AnomalyAlertWidget> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _hasError = false;
     });
     try {
       final result = await apiService.getAnomalies();
+      if (!mounted) return;
       if (result['success'] == true) {
         setState(() {
           _anomalies = result['data']?['anomalies'] ?? [];
@@ -35,16 +37,20 @@ class _AnomalyAlertWidgetState extends State<AnomalyAlertWidget> {
           _isLoading = false;
         });
       } else {
+        if (mounted) {
+          setState(() {
+            _hasError = true;
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
           _hasError = true;
           _isLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _hasError = true;
-        _isLoading = false;
-      });
     }
   }
 

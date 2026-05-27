@@ -6,7 +6,8 @@ class SavingsSuggestionsWidget extends StatefulWidget {
   const SavingsSuggestionsWidget({super.key});
 
   @override
-  State<SavingsSuggestionsWidget> createState() => _SavingsSuggestionsWidgetState();
+  State<SavingsSuggestionsWidget> createState() =>
+      _SavingsSuggestionsWidgetState();
 }
 
 class _SavingsSuggestionsWidgetState extends State<SavingsSuggestionsWidget> {
@@ -22,12 +23,14 @@ class _SavingsSuggestionsWidgetState extends State<SavingsSuggestionsWidget> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _hasError = false;
     });
     try {
       final result = await apiService.getSavingsRecommendations();
+      if (!mounted) return;
       if (result['success'] == true) {
         setState(() {
           _recommendations = result['data']?['recommendations'] ?? [];
@@ -35,16 +38,20 @@ class _SavingsSuggestionsWidgetState extends State<SavingsSuggestionsWidget> {
           _isLoading = false;
         });
       } else {
+        if (mounted) {
+          setState(() {
+            _hasError = true;
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
           _hasError = true;
           _isLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _hasError = true;
-        _isLoading = false;
-      });
     }
   }
 
@@ -56,12 +63,29 @@ class _SavingsSuggestionsWidgetState extends State<SavingsSuggestionsWidget> {
   }
 
   String _formatCurrency(num value) {
-    return NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0).format(value);
+    return NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0)
+        .format(value);
+  }
+
+  String _formatShort(num value) {
+    if (value >= 1000000) {
+      final m = value / 1000000;
+      return '${m.toStringAsFixed(m.truncateToDouble() == m ? 0 : 1)}tr';
+    }
+    if (value >= 1000) return '${(value / 1000).toStringAsFixed(0)}K';
+    return value.toStringAsFixed(0);
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -70,37 +94,64 @@ class _SavingsSuggestionsWidgetState extends State<SavingsSuggestionsWidget> {
             // Header
             Row(
               children: [
-                Icon(Icons.savings, color: Colors.green.shade600),
-                const SizedBox(width: 8),
-                const Text('Gợi ý tiết kiệm',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const Spacer(),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF059669).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.savings_outlined,
+                      size: 18, color: Color(0xFF059669)),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Cơ hội tiết kiệm',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
                 if (!_isLoading)
-                  IconButton(
-                    icon: Icon(Icons.refresh, size: 20, color: Colors.grey.shade600),
-                    onPressed: _loadData,
+                  GestureDetector(
+                    onTap: _loadData,
+                    child: Icon(Icons.refresh_rounded,
+                        size: 18, color: Colors.grey.shade400),
                   ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
 
             // Content
             if (_isLoading)
               const Center(
                 child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: CircularProgressIndicator(),
+                  padding: EdgeInsets.all(24),
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
                 ),
               )
             else if (_hasError)
               Center(
-                child: Column(
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.red),
-                    const SizedBox(height: 8),
-                    const Text('Không thể tải gợi ý'),
-                    TextButton(onPressed: _loadData, child: const Text('Thử lại')),
-                  ],
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Icon(Icons.cloud_off_rounded,
+                          color: Colors.grey.shade300, size: 36),
+                      const SizedBox(height: 8),
+                      Text('Không thể tải dữ liệu',
+                          style: TextStyle(
+                              fontSize: 13, color: Colors.grey.shade400)),
+                      const SizedBox(height: 6),
+                      TextButton.icon(
+                        onPressed: _loadData,
+                        icon: const Icon(Icons.refresh, size: 14),
+                        label: const Text('Thử lại', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ),
                 ),
               )
             else if (_recommendations.isEmpty)
@@ -109,9 +160,24 @@ class _SavingsSuggestionsWidgetState extends State<SavingsSuggestionsWidget> {
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
-                      Icon(Icons.check_circle, color: Colors.green.shade400, size: 48),
-                      const SizedBox(height: 8),
-                      const Text('Chi tiêu của bạn đang hợp lý! 👍'),
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF059669).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(Icons.thumb_up_rounded,
+                            color: Color(0xFF059669), size: 22),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text('Chi tiêu hợp lý!',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      Text('Chưa cần điều chỉnh',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade400)),
                     ],
                   ),
                 ),
@@ -119,78 +185,44 @@ class _SavingsSuggestionsWidgetState extends State<SavingsSuggestionsWidget> {
             else
               Column(
                 children: [
-                  // Summary
-                  if (_summary != null)
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Colors.green.shade500, Colors.green.shade700],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Tiềm năng tiết kiệm/năm',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.green.shade100,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _formatCurrency(_parseNum(_summary!['totalPotentialYearlySavings'])),
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Icon(
-                            Icons.savings,
-                            size: 48,
-                            color: Colors.green.shade200,
-                          ),
-                        ],
-                      ),
-                    ),
+                  // Summary card
+                  if (_summary != null) _buildSummaryCard(),
+                  const SizedBox(height: 12),
+
+                  // Legend
+                  _buildLegend(),
+                  const SizedBox(height: 10),
 
                   // Recommendations
-                  ..._recommendations.take(3).map((rec) => _RecommendationItem(
-                        recommendation: rec,
-                        formatCurrency: _formatCurrency,
-                      )),
+                  ..._recommendations
+                      .take(3)
+                      .map((rec) => _SavingsItem(
+                            recommendation: rec,
+                            formatCurrency: _formatCurrency,
+                            formatShort: _formatShort,
+                          )),
 
                   if (_recommendations.length > 3)
-                    TextButton(
-                      onPressed: () => _showAllRecommendations(context),
-                      child: Text('Xem thêm ${_recommendations.length - 3} gợi ý'),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: TextButton(
+                        onPressed: () => _showAllRecommendations(context),
+                        child: Text(
+                          'Xem thêm ${_recommendations.length - 3} gợi ý →',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
                     ),
 
                   // Footer
                   if (_summary != null)
-                    Container(
-                      margin: const EdgeInsets.only(top: 8),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        border: Border(top: BorderSide(color: Colors.grey.shade100)),
-                      ),
-                      child: Center(
-                        child: Text(
-                          'Chi tiêu TB: ${_formatCurrency(_parseNum(_summary!['totalMonthlyExpense']))}/tháng',
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
-                        ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        'Dựa trên chi tiêu TB ${_formatCurrency(_parseNum(_summary!['totalMonthlyExpense']))}/tháng',
+                        style: TextStyle(
+                            fontSize: 10, color: Colors.grey.shade300),
+                        textAlign: TextAlign.center,
                       ),
                     ),
                 ],
@@ -198,6 +230,83 @@ class _SavingsSuggestionsWidgetState extends State<SavingsSuggestionsWidget> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSummaryCard() {
+    final yearlySaving =
+        _parseNum(_summary!['totalPotentialYearlySavings']);
+    final monthlySaving = yearlySaving / 12;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF059669), Color(0xFF0D9488)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Bạn có thể tiết kiệm mỗi tháng',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.75),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formatCurrency(monthlySaving),
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '≈ ${_formatCurrency(yearlySaving)}/năm',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.flag_rounded,
+                color: Colors.white, size: 22),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegend() {
+    return Row(
+      children: [
+        _LegendDot(color: Colors.red.shade400, label: 'Ưu tiên cao'),
+        const SizedBox(width: 12),
+        _LegendDot(color: Colors.amber.shade500, label: 'Quan trọng'),
+        const SizedBox(width: 12),
+        _LegendDot(color: const Color(0xFF059669), label: 'Gợi ý'),
+      ],
     );
   }
 
@@ -215,14 +324,16 @@ class _SavingsSuggestionsWidgetState extends State<SavingsSuggestionsWidget> {
         expand: false,
         builder: (context, scrollController) => Column(
           children: [
-            Container(
+            Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Icon(Icons.savings, color: Colors.green.shade600),
+                  const Icon(Icons.savings_outlined,
+                      color: Color(0xFF059669)),
                   const SizedBox(width: 8),
                   const Text('Tất cả gợi ý tiết kiệm',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      style: TextStyle(
+                          fontSize: 17, fontWeight: FontWeight.w800)),
                 ],
               ),
             ),
@@ -232,9 +343,10 @@ class _SavingsSuggestionsWidgetState extends State<SavingsSuggestionsWidget> {
                 controller: scrollController,
                 padding: const EdgeInsets.all(16),
                 itemCount: _recommendations.length,
-                itemBuilder: (context, index) => _RecommendationItem(
+                itemBuilder: (context, index) => _SavingsItem(
                   recommendation: _recommendations[index],
                   formatCurrency: _formatCurrency,
+                  formatShort: _formatShort,
                 ),
               ),
             ),
@@ -245,13 +357,41 @@ class _SavingsSuggestionsWidgetState extends State<SavingsSuggestionsWidget> {
   }
 }
 
-class _RecommendationItem extends StatelessWidget {
+// — Subwidgets —
+
+class _LegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _LegendDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(label,
+            style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
+      ],
+    );
+  }
+}
+
+class _SavingsItem extends StatelessWidget {
   final dynamic recommendation;
   final String Function(num) formatCurrency;
+  final String Function(num) formatShort;
 
-  const _RecommendationItem({
+  const _SavingsItem({
     required this.recommendation,
     required this.formatCurrency,
+    required this.formatShort,
   });
 
   double _parseDouble(dynamic value) {
@@ -271,233 +411,169 @@ class _RecommendationItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final rec = recommendation as Map<String, dynamic>? ?? {};
     final category = rec['category'] as Map<String, dynamic>?;
-    final categoryName = category?['name']?.toString() ?? rec['categoryName']?.toString() ?? 'Không xác định';
-    final categoryIcon = category?['icon']?.toString() ?? '📦';
-    final categoryColor = category?['color']?.toString() ?? '#9CA3AF';
-    final currentSpending = _parseDouble(rec['currentMonthlySpending']);
-    final suggestedReduction = _parseDouble(rec['suggestedReduction']);
-    final potentialSavings = _parseDouble(rec['potentialYearlySavings']);
-    final percentOfTotal = _parseDouble(rec['percentOfTotal']);
+    final name = category?['name']?.toString() ??
+        rec['categoryName']?.toString() ??
+        'Không xác định';
+    final icon = category?['icon']?.toString() ?? '📦';
+    final colorHex = category?['color']?.toString() ?? '#9CA3AF';
+    final spending = _parseDouble(rec['currentMonthlySpending']);
+    final reduction = _parseDouble(rec['suggestedReduction']);
+    final yearlySaving = _parseDouble(rec['potentialYearlySavings']);
+    final monthlySaving = yearlySaving / 12;
     final priority = _parseInt(rec['priority']);
     final tip = rec['tip']?.toString() ?? '';
+    final targetSpending = spending * (1 - reduction / 100);
 
-    Color priorityColor;
-    String priorityText;
-    Color priorityBgColor;
-    
-    switch (priority) {
-      case 1:
-        priorityColor = Colors.red.shade700;
-        priorityText = 'Ưu tiên cao';
-        priorityBgColor = Colors.red.shade100;
-        break;
-      case 2:
-        priorityColor = Colors.orange.shade700;
-        priorityText = 'Quan trọng';
-        priorityBgColor = Colors.orange.shade100;
-        break;
-      default:
-        priorityColor = Colors.yellow.shade700;
-        priorityText = 'Gợi ý';
-        priorityBgColor = Colors.yellow.shade100;
-    }
-
-    // Parse color from hex
+    // Parse category color
     Color parsedColor = Colors.grey;
     try {
-      if (categoryColor.startsWith('#')) {
-        parsedColor = Color(int.parse(categoryColor.substring(1), radix: 16) + 0xFF000000);
+      if (colorHex.startsWith('#')) {
+        parsedColor =
+            Color(int.parse(colorHex.substring(1), radix: 16) + 0xFF000000);
       }
     } catch (_) {}
 
-    // Priority bar width
-    final priorityBarWidth = ((4 - priority) / 3);
+    // Priority dot color
+    Color dotColor;
+    switch (priority) {
+      case 1:
+        dotColor = Colors.red.shade400;
+        break;
+      case 2:
+        dotColor = Colors.amber.shade500;
+        break;
+      default:
+        dotColor = const Color(0xFF059669);
+    }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey.shade100),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.shade200,
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4)),
       ),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                // Category Icon
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: parsedColor.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Center(
-                    child: Text(categoryIcon, style: const TextStyle(fontSize: 20)),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                
-                // Content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              categoryName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: priorityBgColor,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              priorityText,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: priorityColor,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      
-                      // Priority Bar
-                      Container(
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: priorityBarWidth,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: priorityColor,
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+          // Category icon
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: parsedColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(11),
             ),
+            child: Center(
+                child: Text(icon, style: const TextStyle(fontSize: 18))),
           ),
+          const SizedBox(width: 10),
 
-          // Current Spending & Reduction
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
+          // Main content
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Hiện tại:', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                      Text(
-                        '${formatCurrency(currentSpending)}/tháng',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                      ),
-                      Text(
-                        'Chiếm ${percentOfTotal.toStringAsFixed(1)}% tổng chi tiêu',
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                // Name + priority dot
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Icon(Icons.trending_down, size: 14, color: Colors.green.shade600),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Giảm ${suggestedReduction.toStringAsFixed(0)}%',
-                          style: TextStyle(
-                            color: Colors.orange.shade700,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                          color: dotColor, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 5),
+
+                // Spending flow: current → target
+                Row(
+                  children: [
+                    Text(
+                      '${formatShort(spending)}/th',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.grey.shade500),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Icon(Icons.arrow_forward_rounded,
+                          size: 12, color: Colors.grey.shade300),
+                    ),
+                    Text(
+                      '${formatShort(targetSpending)}/th',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF059669),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '-${reduction.toStringAsFixed(0)}%',
+                      style: TextStyle(
+                          fontSize: 10, color: Colors.grey.shade400),
+                    ),
+                  ],
+                ),
+
+                // Tip
+                if (tip.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    tip,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey.shade400),
+                  ),
+                ],
               ],
             ),
           ),
+          const SizedBox(width: 8),
 
-          // Tip
-          if (tip.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  tip,
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
-                ),
-              ),
+          // Savings badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF059669).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
             ),
-
-          // Potential Savings
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Tiết kiệm tiềm năng:',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            child: Column(
+              children: [
+                Text(
+                  'Tiết kiệm',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: const Color(0xFF059669).withValues(alpha: 0.7),
+                    fontWeight: FontWeight.w600,
                   ),
-                  Text(
-                    '${formatCurrency(potentialSavings)}/năm',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green.shade600,
-                    ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  '${formatShort(monthlySaving)}/th',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF059669),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],

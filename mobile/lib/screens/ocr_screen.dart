@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -14,7 +14,8 @@ class OcrScreen extends StatefulWidget {
 }
 
 class _OcrScreenState extends State<OcrScreen> {
-  File? _image;
+  XFile? _image;
+  Uint8List? _imageBytes;
   bool _isProcessing = false;
   bool _isSaving = false;
   String? _categoryId;
@@ -31,62 +32,74 @@ class _OcrScreenState extends State<OcrScreen> {
   Future<void> _loadCategories() async {
     try {
       final categories = await apiService.getCategories();
-      setState(() => _categories = categories.where((c) => c['type'] == 'expense').toList());
+      if (mounted) {
+        setState(() => _categories = categories.where((c) => c['type'] == 'expense').toList());
+      }
     } catch (e) {
       // Handle error
     }
   }
 
   Future<void> _pickImage(ImageSource source) async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: source,
-      imageQuality: 85,
-      maxWidth: 1200,
-    );
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 1200,
+      );
 
-    if (pickedFile != null) {
-      setState(() {
-        _image = File(pickedFile.path);
-        _isProcessing = true;
-        _aiResult = null;
-      });
-      await _analyzeWithAI();
+      if (pickedFile != null) {
+        final bytes = await pickedFile.readAsBytes();
+        if (!mounted) return;
+        setState(() {
+          _image = pickedFile;
+          _imageBytes = bytes;
+          _isProcessing = true;
+          _aiResult = null;
+        });
+        await _analyzeWithAI();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi chọn ảnh: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
   Future<void> _analyzeWithAI() async {
-    if (_image == null) return;
+    if (_imageBytes == null) return;
 
+    if (!mounted) return;
     setState(() {
       _isProcessing = true;
       _aiResult = null;
     });
 
     try {
-      final bytes = await _image!.readAsBytes();
-      final base64Image = base64Encode(bytes);
+      final base64Image = base64Encode(_imageBytes!);
 
-      print('📸 Sending image to OCR API, size: ${bytes.length} bytes');
+      print('📸 Sending image to OCR API, size: ${_imageBytes!.length} bytes');
 
       final result = await apiService.analyzeReceiptWithAI(base64Image);
 
       print('🔍 OCR Result: ${result['success']}');
-      
+
       if (result['success'] != true) {
         throw Exception(result['error'] ?? 'OCR failed');
       }
 
+      if (!mounted) return;
       setState(() {
         _aiResult = result;
         _isProcessing = false;
 
-        // Auto-select category
         if (result['suggestedCategory'] != null) {
           _autoSelectCategory(result['suggestedCategory']);
         }
 
-        // Auto-select date
         if (result['date'] != null) {
           try {
             _selectedDate = DateTime.parse(result['date']);
@@ -97,28 +110,35 @@ class _OcrScreenState extends State<OcrScreen> {
       });
     } catch (e) {
       print('❌ OCR Error: $e');
+      if (!mounted) return;
       setState(() {
         _isProcessing = false;
         _aiResult = {
-          'success': false, 
+          'success': false,
           'error': e.toString().replaceAll('Exception: ', '')
         };
       });
     }
   }
 
+  String? get _validCategoryId {
+    if (_categoryId == null) return null;
+    final exists = _categories.any((c) => c['id'] == _categoryId);
+    return exists ? _categoryId : null;
+  }
+
   void _autoSelectCategory(String suggested) {
+    if (_categories.isEmpty) return;
     final suggestedLower = suggested.toLowerCase();
-    
+
     for (final cat in _categories) {
       final catName = cat['name'].toString().toLowerCase();
       if (catName.contains(suggestedLower) || suggestedLower.contains(catName)) {
-        setState(() => _categoryId = cat['id']);
+        if (mounted) setState(() => _categoryId = cat['id']);
         return;
       }
     }
 
-    // Mapping aliases
     final Map<String, List<String>> categoryAliases = {
       'ăn uống': ['food', 'restaurant', 'cafe', 'nhà hàng', 'quán'],
       'mua sắm': ['shopping', 'store', 'cửa hàng', 'siêu thị'],
@@ -132,7 +152,7 @@ class _OcrScreenState extends State<OcrScreen> {
       for (final entry in categoryAliases.entries) {
         if (catName.contains(entry.key)) {
           if (entry.value.any((alias) => suggestedLower.contains(alias))) {
-            setState(() => _categoryId = cat['id']);
+            if (mounted) setState(() => _categoryId = cat['id']);
             return;
           }
         }
@@ -146,7 +166,8 @@ class _OcrScreenState extends State<OcrScreen> {
   }
 
   Future<void> _saveTransaction() async {
-    if (_aiResult == null || _aiResult!['success'] != true || _categoryId == null) return;
+    final validCatId = _validCategoryId;
+    if (_aiResult == null || _aiResult!['success'] != true || validCatId == null) return;
 
     setState(() => _isSaving = true);
 
@@ -156,9 +177,16 @@ class _OcrScreenState extends State<OcrScreen> {
           'rawText': _aiResult!['storeName'] ?? '',
           'extractedAmount': _aiResult!['totalAmount'],
           'extractedItems': (_aiResult!['items'] as List?)?.map((i) => i['name']).toList() ?? [],
+          'receiptItems': (_aiResult!['items'] as List?) ?? [],
+          'storeName': _aiResult!['storeName'],
+          'invoiceNumber': _aiResult!['invoiceNumber'],
+          'receiptDate': _aiResult!['date'],
+          'receiptTime': _aiResult!['time'],
+          'totalAmount': _aiResult!['totalAmount'],
+          'suggestedCategory': _aiResult!['suggestedCategory'],
           'aiAnalysis': _aiResult,
         },
-        'categoryId': _categoryId,
+        'categoryId': validCatId,
         'transactionDate': _selectedDate.toIso8601String().split('T')[0],
       });
 
@@ -183,8 +211,10 @@ class _OcrScreenState extends State<OcrScreen> {
   }
 
   void _reset() {
+    if (!mounted) return;
     setState(() {
       _image = null;
+      _imageBytes = null;
       _aiResult = null;
       _categoryId = null;
       _selectedDate = DateTime.now();
@@ -282,12 +312,18 @@ class _OcrScreenState extends State<OcrScreen> {
         // Image preview
         ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: Image.file(
-            _image!,
-            height: 200,
-            width: double.infinity,
-            fit: BoxFit.cover,
-          ),
+          child: _imageBytes != null
+              ? Image.memory(
+                  _imageBytes!,
+                  height: 200,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                )
+              : Container(
+                  height: 200,
+                  color: Colors.grey.shade200,
+                  child: const Center(child: Icon(Icons.image, size: 64)),
+                ),
         ),
         const SizedBox(height: 16),
 
@@ -375,7 +411,7 @@ class _OcrScreenState extends State<OcrScreen> {
 
             // Category selector
             DropdownButtonFormField<String>(
-              value: _categoryId,
+              value: _validCategoryId,
               decoration: InputDecoration(
                 labelText: 'Danh mục',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -479,7 +515,7 @@ class _OcrScreenState extends State<OcrScreen> {
               const SizedBox(width: 16),
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: _aiResult!['success'] == true && _categoryId != null && !_isSaving
+                  onPressed: _aiResult!['success'] == true && _validCategoryId != null && !_isSaving
                       ? _saveTransaction
                       : null,
                   icon: _isSaving

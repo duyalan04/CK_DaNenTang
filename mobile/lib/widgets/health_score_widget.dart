@@ -38,12 +38,14 @@ class _HealthScoreWidgetState extends State<HealthScoreWidget>
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _hasError = false;
     });
     try {
       final result = await apiService.getHealthScore();
+      if (!mounted) return;
       if (result['success'] == true) {
         setState(() {
           _data = result['data'];
@@ -51,16 +53,20 @@ class _HealthScoreWidgetState extends State<HealthScoreWidget>
         });
         _animationController.forward(from: 0);
       } else {
+        if (mounted) {
+          setState(() {
+            _hasError = true;
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
           _hasError = true;
           _isLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _hasError = true;
-        _isLoading = false;
-      });
     }
   }
 

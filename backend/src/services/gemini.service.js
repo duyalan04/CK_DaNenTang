@@ -2,27 +2,24 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
 
-// ============ RATE LIMITING & RETRY CONFIG ============
 const RATE_LIMIT_CONFIG = {
   maxRetries: 3,
-  baseDelayMs: 1000,      // 1 giây
-  maxDelayMs: 30000,      // 30 giây max
-  maxConcurrent: 2,       // Số request đồng thời tối đa
-  requestsPerMinute: 10,  // Giới hạn requests/phút (free tier thường là 15)
+  baseDelayMs: 1000,    
+  maxDelayMs: 30000,    
+  maxConcurrent: 2,     
+  requestsPerMinute: 10, 
 };
 
-// Request queue để quản lý rate limiting
 let activeRequests = 0;
 let requestQueue = [];
 let requestTimestamps = [];
 
-// Simple in-memory cache (có thể thay bằng Redis nếu cần)
 const responseCache = new Map();
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 phút
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
-const RECEIPT_PROMPT = `Bạn là chuyên gia OCR phân tích hóa đơn Việt Nam. Phân tích ảnh hóa đơn và trích xuất thông tin chính xác.
+const RECEIPT_PROMPT = `Bạn là chuyên gia OCR phân tích hóa đơn Việt Nam, bao gồm hóa đơn giấy và hóa đơn điện tử/website như GS25. Phân tích ảnh hóa đơn và trích xuất thông tin chính xác.
 
-QUAN TRỌNG: CHỈ TRẢ VỀ JSON HỢP LỆ, KHÔNG CÓ TEXT GIẢI THÍCH TRƯỚC HOẶC SAU JSON.
+QUAN TRỌNG: CHỈ TRẢ VỀ JSON HỢP LỆ, KHÔNG CÓ MARKDOWN, KHÔNG CÓ TEXT GIẢI THÍCH TRƯỚC HOẶC SAU JSON. JSON phải ngắn gọn để tránh bị cắt.
 
 ## CÁC LOẠI HÓA ĐƠN VIỆT NAM PHỔ BIẾN:
 
@@ -32,6 +29,7 @@ QUAN TRỌNG: CHỈ TRẢ VỀ JSON HỢP LỆ, KHÔNG CÓ TEXT GIẢI THÍCH TR
 4. **Nhà thuốc**: "Phiếu tạm tính", "Hóa đơn bán hàng"
 5. **Spa/Dịch vụ**: "Phiếu thanh toán", có danh sách dịch vụ
 6. **Cửa hàng điện tử/KiotViet**: Logo KiotViet, có mã HĐ
+7. **Hóa đơn điện tử trên web/app**: Có domain, bảng sản phẩm, "Mã hóa đơn", "Thời gian", "Thành tiền"
 
 ## CÁCH NHẬN DIỆN SỐ TIỀN TỔNG CỘNG:
 
@@ -106,11 +104,30 @@ Hóa đơn spa với "Thành tiền: 300,000" → totalAmount: 300000
 
 BẮT BUỘC: Response phải bắt đầu bằng { và kết thúc bằng }. Không thêm text giải thích.`;
 
-// ============ HELPER FUNCTIONS ============
+const RECEIPT_SUMMARY_PROMPT = `Bạn là chuyên gia OCR hóa đơn Việt Nam. Ảnh có thể là hóa đơn giấy hoặc hóa đơn điện tử/website như GS25.
 
-/**
- * Tạo hash đơn giản từ image base64 để làm cache key
- */
+CHỈ TRẢ VỀ JSON HỢP LỆ, KHÔNG MARKDOWN, KHÔNG GIẢI THÍCH.
+Không trả danh sách items. Chỉ đọc thông tin tổng quan:
+
+{
+  "success": true,
+  "storeName": "Tên cửa hàng",
+  "invoiceNumber": "Mã hóa đơn nếu có",
+  "date": "YYYY-MM-DD",
+  "time": "HH:MM",
+  "subtotal": 0,
+  "discountAmount": 0,
+  "totalAmount": 0,
+  "paymentMethod": "Tiền mặt/Thẻ/Chuyển khoản/null",
+  "currency": "VND",
+  "cashier": "Tên nhân viên nếu có",
+  "suggestedCategory": "Ăn uống hoặc Mua sắm hoặc Sức khỏe hoặc Giải trí hoặc Di chuyển hoặc Hóa đơn hoặc Khác",
+  "confidence": 80,
+  "rawText": "Tối đa 200 ký tự quan trọng"
+}
+
+Ưu tiên đọc "Thành tiền", "Tổng", "Tổng cộng", "Tổng thanh toán". Với GS25, "Thành tiền" màu đỏ là totalAmount.`;
+
 function createImageHash(imageBase64) {
   let hash = 0;
   const sample = imageBase64.substring(0, 1000) + imageBase64.substring(imageBase64.length - 1000);
@@ -122,41 +139,27 @@ function createImageHash(imageBase64) {
   return `img_${hash}_${imageBase64.length}`;
 }
 
-/**
- * Sleep function
- */
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Tính delay với exponential backoff
- */
 function calculateBackoffDelay(attempt) {
   const delay = Math.min(
     RATE_LIMIT_CONFIG.baseDelayMs * Math.pow(2, attempt),
     RATE_LIMIT_CONFIG.maxDelayMs
   );
-  // Thêm jitter để tránh thundering herd
   return delay + Math.random() * 1000;
 }
 
-/**
- * Kiểm tra rate limit (requests per minute)
- */
 function checkRateLimit() {
   const now = Date.now();
   const oneMinuteAgo = now - 60000;
   
-  // Xóa timestamps cũ hơn 1 phút
   requestTimestamps = requestTimestamps.filter(ts => ts > oneMinuteAgo);
   
   return requestTimestamps.length < RATE_LIMIT_CONFIG.requestsPerMinute;
 }
 
-/**
- * Thêm request vào queue và xử lý
- */
 async function enqueueRequest(requestFn) {
   return new Promise((resolve, reject) => {
     requestQueue.push({ requestFn, resolve, reject });
@@ -189,29 +192,32 @@ async function processQueue() {
     reject(error);
   } finally {
     activeRequests--;
-    // Xử lý request tiếp theo
     if (requestQueue.length > 0) {
       setTimeout(processQueue, 100);
     }
   }
 }
 
-/**
- * Gọi Gemini API với retry logic
- */
-async function callGeminiWithRetry(imageBase64, mimeType, attempt = 0) {
+async function callGeminiWithRetry(
+  imageBase64,
+  mimeType,
+  attempt = 0,
+  prompt = RECEIPT_PROMPT,
+  maxOutputTokens = 4096
+) {
   try {
     const model = genAI.getGenerativeModel({ 
       model: 'gemini-2.5-flash',
       generationConfig: {
         temperature: 0.1,
         topP: 0.8,
-        maxOutputTokens: 2048,
+        maxOutputTokens,
+        responseMimeType: 'application/json',
       }
     });
 
     const result = await model.generateContent([
-      RECEIPT_PROMPT,
+      prompt,
       {
         inlineData: {
           data: imageBase64,
@@ -237,7 +243,7 @@ async function callGeminiWithRetry(imageBase64, mimeType, attempt = 0) {
       console.log(`⏳ Rate limit hit, retrying in ${Math.round(delay/1000)}s (attempt ${attempt + 1}/${RATE_LIMIT_CONFIG.maxRetries})`);
       
       await sleep(delay);
-      return callGeminiWithRetry(imageBase64, mimeType, attempt + 1);
+      return callGeminiWithRetry(imageBase64, mimeType, attempt + 1, prompt, maxOutputTokens);
     }
 
     // Nếu vẫn bị rate limit sau khi retry, trả về lỗi thân thiện
@@ -247,6 +253,32 @@ async function callGeminiWithRetry(imageBase64, mimeType, attempt = 0) {
 
     throw error;
   }
+}
+
+function extractItemsFromResponse(response) {
+  const items = [];
+
+  try {
+    const itemsMatch = response.match(/"items"\s*:\s*\[([\s\S]*)/i);
+    if (!itemsMatch) return items;
+
+    const itemsStr = itemsMatch[1];
+    const itemRegex = /\{[^}]*"name"\s*:\s*"([^"]+)"[^}]*"quantity"\s*:\s*([\d.]+)[^}]*"unitPrice"\s*:\s*"?(\d[\d,.\s]*)"?[^}]*"total"\s*:\s*"?(\d[\d,.\s]*)"?[^}]*\}/gi;
+    let itemMatch;
+
+    while ((itemMatch = itemRegex.exec(itemsStr)) !== null) {
+      items.push({
+        name: itemMatch[1],
+        quantity: parseFloat(itemMatch[2]) || 1,
+        unitPrice: cleanAmount(itemMatch[3]),
+        total: cleanAmount(itemMatch[4])
+      });
+    }
+  } catch (itemError) {
+    console.error('Failed to extract partial items:', itemError.message);
+  }
+
+  return items;
 }
 
 // ============ MAIN FUNCTION ============
@@ -314,29 +346,68 @@ async function analyzeReceipt(imageBase64, mimeType = 'image/jpeg') {
       console.error('❌ JSON Parse Error:', parseError.message);
       console.error('Raw response sample:', response.substring(0, 500));
       console.error('Attempting fallback parsing...');
+
+      const partialItems = extractItemsFromResponse(response);
+
+      // Nếu JSON chi tiết bị cắt do bảng sản phẩm dài, gọi lại một prompt cực ngắn
+      // chỉ lấy thông tin tổng quan. Trường hợp hóa đơn điện tử GS25 thường rơi vào nhánh này.
+      try {
+        const summaryResponse = await callGeminiWithRetry(
+          imageBase64,
+          mimeType,
+          0,
+          RECEIPT_SUMMARY_PROMPT,
+          1024
+        );
+        console.log('Gemini Summary Fallback Response:', summaryResponse);
+
+        let summaryJson = summaryResponse
+          .trim()
+          .replace(/^```json\s*/i, '')
+          .replace(/^```\s*/, '')
+          .replace(/\s*```$/, '');
+
+        const summaryMatch = summaryJson.match(/\{[\s\S]*\}/);
+        if (summaryMatch) {
+          summaryJson = summaryMatch[0].replace(/,(\s*[}\]])/g, '$1');
+          parsed = JSON.parse(summaryJson);
+          parsed.items = partialItems;
+          parsed.note = partialItems.length > 0
+            ? 'Summary parsed after detailed JSON was truncated'
+            : 'Summary parsed after detailed JSON was truncated; items omitted';
+        }
+      } catch (summaryError) {
+        console.error('❌ Summary fallback failed:', summaryError.message);
+      }
       
-      // Fallback: Trích xuất thông tin cơ bản bằng regex
-      const totalMatch = response.match(/"totalAmount"\s*:\s*"?(\d[\d,.\s]*)"?/i);
-      const storeMatch = response.match(/"storeName"\s*:\s*"([^"]+)"/i);
-      const dateMatch = response.match(/"date"\s*:\s*"([^"]+)"/i);
-      const categoryMatch = response.match(/"suggestedCategory"\s*:\s*"([^"]+)"/i);
-      
-      if (totalMatch) {
+      // Fallback: Trích xuất thông tin bằng regex - bao gồm cả items
+      if (!parsed) {
+        const totalMatch = response.match(/"totalAmount"\s*:\s*"?(\d[\d,.\s]*)"?/i);
+        const storeMatch = response.match(/"storeName"\s*:\s*"([^"]+)"/i);
+        const dateMatch = response.match(/"date"\s*:\s*"([^"]+)"/i);
+        const categoryMatch = response.match(/"suggestedCategory"\s*:\s*"([^"]+)"/i);
+        const invoiceMatch = response.match(/"invoiceNumber"\s*:\s*"([^"]+)"/i);
+        const timeMatch = response.match(/"time"\s*:\s*"([^"]+)"/i);
+
+        if (totalMatch) {
         parsed = {
           success: true,
           storeName: storeMatch ? storeMatch[1] : 'Không xác định',
+          invoiceNumber: invoiceMatch ? invoiceMatch[1] : null,
           date: dateMatch ? dateMatch[1] : new Date().toISOString().split('T')[0],
+          time: timeMatch ? timeMatch[1] : null,
           totalAmount: cleanAmount(totalMatch[1]),
           suggestedCategory: categoryMatch ? categoryMatch[1] : 'Mua sắm',
-          items: [],
-          confidence: 60,
+            items: partialItems,
+            confidence: partialItems.length > 0 ? 75 : 60,
           note: 'Parsed with fallback method'
         };
-      } else {
+        } else {
         return { 
           success: false, 
-          error: 'Không thể đọc thông tin từ hóa đơn. Vui lòng chụp rõ hơn.' 
+            error: 'Không thể đọc thông tin từ hóa đơn. Vui lòng chụp rõ hơn hoặc crop rõ vùng tổng tiền.' 
         };
+        }
       }
     }
     

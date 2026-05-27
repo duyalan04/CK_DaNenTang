@@ -4,7 +4,6 @@ exports.register = async (req, res) => {
   try {
     const { email, password, fullName } = req.body;
 
-    // Validate input
     if (!email || !password) {
       return res.status(400).json({ error: 'Email và password là bắt buộc' });
     }
@@ -13,12 +12,10 @@ exports.register = async (req, res) => {
       return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 8 ký tự' });
     }
 
-    // Kiểm tra mật khẩu có chữ và số
     if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
       return res.status(400).json({ error: 'Mật khẩu phải có cả chữ và số' });
     }
 
-    // Đăng ký user với Supabase Auth
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -32,12 +29,10 @@ exports.register = async (req, res) => {
       throw error;
     }
 
-    // Kiểm tra user đã được tạo
     if (!data.user) {
       return res.status(400).json({ error: 'Không thể tạo tài khoản' });
     }
 
-    // Tạo profile (trigger có thể đã tạo, nên dùng upsert)
     const { error: profileError } = await supabase
       .from('profiles')
       .upsert({
@@ -47,10 +42,8 @@ exports.register = async (req, res) => {
 
     if (profileError) {
       console.error('Profile Error:', profileError);
-      // Không throw error vì user đã được tạo
     }
 
-    // Tạo default categories
     const defaultCategories = [
       { name: 'Ăn uống', icon: 'restaurant', color: '#FF6B6B', type: 'expense', is_default: true },
       { name: 'Di chuyển', icon: 'directions_car', color: '#4ECDC4', type: 'expense', is_default: true },
@@ -68,7 +61,6 @@ exports.register = async (req, res) => {
 
     if (catError) {
       console.error('Categories Error:', catError);
-      // Không throw error vì user đã được tạo
     }
 
     res.status(201).json({ 
@@ -98,8 +90,7 @@ exports.login = async (req, res) => {
 
     if (error) {
       console.error('Login Error:', error);
-      
-      // Xử lý các lỗi cụ thể
+
       if (error.message.includes('Invalid login credentials')) {
         return res.status(401).json({ error: 'Email hoặc mật khẩu không đúng' });
       }

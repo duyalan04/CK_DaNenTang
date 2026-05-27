@@ -1,10 +1,11 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Lightbulb, RefreshCw, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import api from '../lib/api'
 
 export default function InsightsCard() {
     const [isRefreshing, setIsRefreshing] = useState(false)
+    const queryClient = useQueryClient()
 
     const { data, isLoading, error, refetch } = useQuery({
         queryKey: ['insights'],
@@ -14,7 +15,13 @@ export default function InsightsCard() {
 
     const handleRefresh = async () => {
         setIsRefreshing(true)
-        await refetch()
+        // Gọi API với forceRefresh để bỏ cache cũ (có thể chứa text lỗi encoding)
+        try {
+            const freshData = await api.get('/analytics/insights?forceRefresh=true').then(res => res.data)
+            queryClient.setQueryData(['insights'], freshData)
+        } catch (e) {
+            console.error('Refresh insights failed:', e)
+        }
         setIsRefreshing(false)
     }
 
